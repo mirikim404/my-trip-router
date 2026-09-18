@@ -21,6 +21,26 @@ const Search = ({ onAddPlace }) => {
     }
   };
 
+  const handleAdd = (day, item) => {
+    if (!window.naver || !window.naver.maps) {
+      return alert('지도 API가 로드되지 않았습니다. 잠시 후 다시 시도해주세요.');
+    }
+
+    const cleanTitle = item.title.replace(/<[^>]*>?/gm, '');
+    const tm128Point = new window.naver.maps.Point(
+      parseInt(item.mapx, 10),
+      parseInt(item.mapy, 10)
+    );
+    const latLng = window.naver.maps.TransCoord.fromTM128ToLatLng(tm128Point);
+
+    onAddPlace(day, {
+      title: cleanTitle,
+      address: item.address,
+      lat: latLng.y,
+      lng: latLng.x
+    });
+  };
+
   return (
     <div style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
       <h3 style={{ marginTop: 0, fontSize: '16px' }}>장소 검색</h3>
@@ -49,10 +69,10 @@ const Search = ({ onAddPlace }) => {
               <div style={{ color: '#666', fontSize: '12px', marginBottom: '5px' }}>{item.address}</div>
               
               <div style={{ display: 'flex', gap: '5px' }}>
-                <button onClick={() => onAddPlace('day1', { title: cleanTitle, address: item.address, mapx: item.mapx, mapy: item.mapy })} style={{ fontSize: '11px', cursor: 'pointer' }}>
+                <button onClick={() => handleAdd('day1', item)} style={{ fontSize: '11px', cursor: 'pointer' }}>
                   + Day 1 추가
                 </button>
-                <button onClick={() => onAddPlace('day2', { title: cleanTitle, address: item.address, mapx: item.mapx, mapy: item.mapy })} style={{ fontSize: '11px', cursor: 'pointer' }}>
+                <button onClick={() => handleAdd('day2', item)} style={{ fontSize: '11px', cursor: 'pointer' }}>
                   + Day 2 추가
                 </button>
               </div>
