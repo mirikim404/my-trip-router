@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { optimizeRouteNearestNeighbor } from './utils/tspAlgo';
 import MapViewer from './components/MapViewer';
+import Search from './components/Search';
 
 function App() {
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
@@ -17,16 +18,11 @@ function App() {
     localStorage.setItem('myTripPlan', JSON.stringify(itinerary));
   }, [itinerary]);
 
-  const searchPlace = async (keyword) => {
-    try {
-      const res = await axios.get(`${API_BASE_URL}/api/search`, {
-        params: { query: keyword }
-      });
-      console.log('검색 결과:', res.data.items);
-      alert('개발자 도구(F12) 콘솔창에서 검색 결과를 확인하세요!');
-    } catch (error) {
-      console.error('검색 중 오류 발생:', error);
-    }
+  const addPlace = (day, placeData) => {
+    setItinerary(prev => ({
+      ...prev,
+      [day]: [...prev[day], placeData]
+    }));
   };
 
   const optimizeAndDrawRoute = async (day) => {
@@ -59,12 +55,7 @@ function App() {
       <div style={{ width: '350px', padding: '20px', borderRight: '1px solid #ccc', overflowY: 'auto', backgroundColor: '#fff' }}>
         <h2 style={{ marginTop: 0 }}>나만의 플래너 🗺️</h2>
         
-        <div style={{ marginBottom: '20px', padding: '10px', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
-          <p style={{ margin: '0 0 10px 0', fontSize: '14px', fontWeight: 'bold' }}>장소 검색 테스트</p>
-          <button onClick={() => searchPlace('해운대 맛집')} style={{ padding: '8px 12px', cursor: 'pointer' }}>
-            '해운대 맛집' 검색
-          </button>
-        </div>
+        <Search onAddPlace={addPlace} />
         
         {Object.keys(itinerary).map((day) => (
           <div key={day} style={{ marginBottom: '30px' }}>
