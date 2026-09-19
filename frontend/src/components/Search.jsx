@@ -1,36 +1,41 @@
 import { useState } from 'react';
 import axios from 'axios';
 
-const Search = ({ onAddPlace }) => {
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+
+const Search = ({ days, onAddPlace }) => {
   const [keyword, setKeyword] = useState('');
   const [results, setResults] = useState([]);
-  
-  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+  const [selectedDay, setSelectedDay] = useState(days[0]?.key || '');
+  const selectedDayKey = days.some((day) => day.key === selectedDay) ? selectedDay : days[0]?.key || '';
+  const selectedDayLabel = days.find((day) => day.key === selectedDayKey);
 
   const handleSearch = async () => {
     if (!keyword.trim()) return;
-    
+
     try {
-      const res = await axios.get(`${API_BASE_URL}/api/search`, {
-        params: { query: keyword }
+      const response = await axios.get(`${API_BASE_URL}/api/search`, {
+        params: { query: keyword },
       });
-      setResults(res.data.items);
+      setResults(response.data.items || []);
     } catch (error) {
       console.error('검색 오류:', error);
-      alert('검색 중 오류가 발생했습니다.');
+      alert('검색 중 오류가 발생했어요.');
     }
   };
 
-  const handleAdd = async (day, item) => {
+  const handleAdd = async (item) => {
+    if (!selectedDayKey) return;
+
     const cleanTitle = item.title.replace(/<[^>]*>?/gm, '');
-    const categories = (item.category || '').split('>').map(category => category.trim()).filter(Boolean);
+    const categories = (item.category || '').split('>').map((category) => category.trim()).filter(Boolean);
     const rawLongitude = Number(item.mapx);
     const rawLatitude = Number(item.mapy);
     const longitude = Math.abs(rawLongitude) > 180 ? rawLongitude / 10000000 : rawLongitude;
     const latitude = Math.abs(rawLatitude) > 90 ? rawLatitude / 10000000 : rawLatitude;
 
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-      alert('검색 결과의 위치를 변환하지 못했습니다. 다른 장소를 선택해주세요.');
+      alert('검색 결과의 위치를 변환하지 못했어요. 다른 장소를 선택해주세요.');
       return;
     }
 
@@ -40,7 +45,7 @@ const Search = ({ onAddPlace }) => {
         title: cleanTitle,
         address: item.roadAddress || item.address,
         lat: latitude,
-        lng: longitude
+        lng: longitude,
       });
       googleDetails = detailsResponse.data;
       if (googleDetails.photoUrl?.startsWith('/')) {
@@ -50,7 +55,7 @@ const Search = ({ onAddPlace }) => {
       console.warn('Google 장소 상세 정보를 불러오지 못했습니다.', error);
     }
 
-    onAddPlace(day, {
+    onAddPlace(selectedDayKey, {
       title: cleanTitle,
       address: item.address,
       roadAddress: item.roadAddress,
@@ -62,50 +67,57 @@ const Search = ({ onAddPlace }) => {
       naverMapLink: `https://map.naver.com/p/search/${encodeURIComponent(cleanTitle)}`,
       ...googleDetails,
       lat: latitude,
-      lng: longitude
+      lng: longitude,
     });
   };
 
   return (
-    <div style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
-      <h3 style={{ marginTop: 0, fontSize: '16px' }}>장소 검색</h3>
-      
-      <div style={{ display: 'flex', gap: '5px', marginBottom: '10px' }}>
-        <input 
-          type="text" 
-          value={keyword}
-          onChange={(e) => setKeyword(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-          placeholder="예: 해운대 맛집"
-          style={{ flex: 1, padding: '8px' }}
-        />
-        <button onClick={handleSearch} style={{ padding: '8px 12px', cursor: 'pointer' }}>
-          검색
-        </button>
+    <section className="search-panel" aria-label="장소 검색">
+      <div className="search-header">
+        <h3>장소 검색</h3>
+        <select
+          value={selectedDayKey}
+          onChange={(event) => setSelectedDay(event.target.value)}
+          aria-label="장소를 추가할 날짜"
+        >
+          {days.map((day) => (
+            <option key={day.key} value={day.key}>
+              {day.label} · {day.displayDate}
+            </option>
+          ))}
+        </select>
       </div>
 
-      <ul style={{ listStyle: 'none', padding: 0, margin: 0, maxHeight: '200px', overflowY: 'auto' }}>
-        {results.map((item, idx) => {
+      <div className="search-box">
+        <input
+          type="text"
+          value={keyword}
+          onChange={(event) => setKeyword(event.target.value)}
+          onKeyDown={(event) => event.key === 'Enter' && handleSearch()}
+          placeholder="예: 성수동 맛집"
+        />
+        <button onClick={handleSearch}>검색</button>
+      </div>
+
+      <ul className="search-results">
+        {results.map((item, index) => {
           const cleanTitle = item.title.replace(/<[^>]*>?/gm, '');
-          
+
           return (
-            <li key={idx} style={{ padding: '10px', borderBottom: '1px solid #ddd', fontSize: '14px' }}>
-              <div style={{ fontWeight: 'bold' }}>{cleanTitle}</div>
-              <div style={{ color: '#666', fontSize: '12px', marginBottom: '5px' }}>{item.address}</div>
-              
-              <div style={{ display: 'flex', gap: '5px' }}>
-                <button onClick={() => handleAdd('day1', item)} style={{ fontSize: '11px', cursor: 'pointer' }}>
-                  + Day 1 추가
-                </button>
-                <button onClick={() => handleAdd('day2', item)} style={{ fontSize: '11px', cursor: 'pointer' }}>
-                  + Day 2 추가
-                </button>
+            <li key={`${cleanTitle}-${index}`}>
+              <div>
+                <strong>{cleanTitle}</strong>
+                <span>{item.roadAddress || item.address || '주소 정보 없음'}</span>
               </div>
+
+              <button onClick={() => handleAdd(item)}>
+                {selectedDayLabel ? `${selectedDayLabel.label}에 추가` : '추가'}
+              </button>
             </li>
           );
         })}
       </ul>
-    </div>
+    </section>
   );
 };
 

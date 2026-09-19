@@ -58,7 +58,6 @@ const MapViewer = ({ places, routeData }) => {
         const placeCategory = escapeHtml(place.category);
         const placeType = escapeHtml(place.placeType);
         const placeSubcategory = escapeHtml(place.subcategory);
-        const placeTelephone = escapeHtml(place.telephone);
         const placeLink = escapeHtml(place.link);
         const naverMapLink = escapeHtml(place.naverMapLink);
         const photoUrl = escapeHtml(place.photoUrl);

@@ -2,11 +2,38 @@ const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
 const path = require('path');
+const fs = require('fs');
+const crypto = require('crypto');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '5mb' }));
+
+const DATA_DIR = path.join(__dirname, 'data');
+const PLANS_FILE = path.join(DATA_DIR, 'plans.json');
+
+const ensurePlanStore = () => {
+  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+  if (!fs.existsSync(PLANS_FILE)) fs.writeFileSync(PLANS_FILE, '{}', 'utf8');
+};
+
+const readPlans = () => {
+  ensurePlanStore();
+  try {
+    return JSON.parse(fs.readFileSync(PLANS_FILE, 'utf8'));
+  } catch (error) {
+    console.error('Plan store read error:', error);
+    return {};
+  }
+};
+
+const writePlans = (plans) => {
+  ensurePlanStore();
+  fs.writeFileSync(PLANS_FILE, JSON.stringify(plans, null, 2), 'utf8');
+};
+
+const createPlanId = () => crypto.randomBytes(5).toString('base64url');
 
 const {
   NCP_MAP_CLIENT_ID,
@@ -49,6 +76,47 @@ const decodePolyline = (encoded) => {
 };
 
 // 1. 장소 검색 API 프록시 (NAVER API HUB - 지역 검색)
+app.post('/api/plans', (req, res) => {
+  try {
+    const { profile, itinerary } = req.body;
+
+    if (!profile?.travelerName || !Array.isArray(profile?.days) || typeof itinerary !== 'object') {
+      return res.status(400).json({ error: 'Invalid plan payload.' });
+    }
+
+    const plans = readPlans();
+    let id = createPlanId();
+    while (plans[id]) id = createPlanId();
+
+    plans[id] = {
+      id,
+      profile,
+      itinerary,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    writePlans(plans);
+
+    res.status(201).json({ id, plan: plans[id] });
+  } catch (error) {
+    console.error('Plan save error:', error);
+    res.status(500).json({ error: 'Plan Save Error' });
+  }
+});
+
+app.get('/api/plans/:id', (req, res) => {
+  try {
+    const plans = readPlans();
+    const plan = plans[req.params.id];
+
+    if (!plan) return res.status(404).json({ error: 'Plan not found.' });
+    res.json(plan);
+  } catch (error) {
+    console.error('Plan read error:', error);
+    res.status(500).json({ error: 'Plan Read Error' });
+  }
+});
+
 app.get('/api/search', async (req, res) => {
   try {
     const { query } = req.query;

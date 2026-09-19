@@ -1,7 +1,18 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import Search from './Search';
 
-const Sidebar = ({ itinerary, onAddPlace, onDeletePlace, onReorder, onOptimize }) => {
+const Sidebar = ({
+  profile,
+  days,
+  itinerary,
+  onAddPlace,
+  onDeletePlace,
+  onReorder,
+  onOptimize,
+  onResetTrip,
+  onSharePlan,
+  shareStatus,
+}) => {
   const [draggedItem, setDraggedItem] = useState(null);
   const [selectedPlaces, setSelectedPlaces] = useState({});
   const itemRefs = useRef(new Map());
@@ -13,7 +24,7 @@ const Sidebar = ({ itinerary, onAddPlace, onDeletePlace, onReorder, onOptimize }
 
   const getSelectedPlaces = (day) => {
     const selectedKeys = selectedPlaces[day];
-    return itinerary[day].filter((place) => (
+    return (itinerary[day] || []).filter((place) => (
       !selectedKeys || selectedKeys.includes(getPlaceKey(day, place))
     ));
   };
@@ -33,9 +44,9 @@ const Sidebar = ({ itinerary, onAddPlace, onDeletePlace, onReorder, onOptimize }
           element.animate(
             [
               { transform: `translateY(${offsetY}px)` },
-              { transform: 'translateY(0)' }
+              { transform: 'translateY(0)' },
             ],
-            { duration: 240, easing: 'ease-out' }
+            { duration: 240, easing: 'ease-out' },
           );
         }
       }
@@ -47,131 +58,116 @@ const Sidebar = ({ itinerary, onAddPlace, onDeletePlace, onReorder, onOptimize }
   }, [itinerary]);
 
   return (
-    <div style={{
-      width: '360px',
-      height: '100vh',
-      padding: '20px',
-      borderRight: '1px solid #e0e0e0',
-      overflowY: 'auto',
-      backgroundColor: '#ffffff',
-      boxSizing: 'border-box'
-    }}>
-      <h2 style={{ marginTop: 0, fontSize: '20px', color: '#111' }}>My Trip Router 🗺️</h2>
-      
-      <Search onAddPlace={onAddPlace} />
-
-      {Object.keys(itinerary).map((day) => (
-        <div key={day} style={{ marginBottom: '25px', padding: '15px', border: '1px solid #eee', borderRadius: '8px' }}>
-          <h3 style={{ margin: '0 0 10px 0', fontSize: '15px', color: '#007bff' }}>
-            {day.toUpperCase()}
-          </h3>
-          
-          {itinerary[day].length === 0 ? (
-            <p style={{ color: '#888', fontSize: '13px', margin: '5px 0' }}>추가된 장소가 없습니다.</p>
-          ) : (
-            <ul style={{ paddingLeft: '0', listStyle: 'none', margin: '0 0 10px 0' }}>
-              {itinerary[day].map((place, idx) => {
-                const placeKey = getPlaceKey(day, place);
-                const selectedKeys = selectedPlaces[day];
-                const isSelected = !selectedKeys || selectedKeys.includes(placeKey);
-
-                return (
-                <li key={placeKey} ref={(element) => itemRefs.current.set(placeKey, element)} style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  padding: '8px 0',
-                  borderBottom: '1px solid #f0f0f0',
-                  fontSize: '13px',
-                  cursor: 'grab'
-                }}>
-                  <input
-                    type="checkbox"
-                    checked={isSelected}
-                    onChange={() => {
-                      const currentKeys = selectedKeys || itinerary[day].map(item => getPlaceKey(day, item));
-                      setSelectedPlaces(prev => ({
-                        ...prev,
-                        [day]: isSelected
-                          ? currentKeys.filter(key => key !== placeKey)
-                          : [...currentKeys, placeKey]
-                      }));
-                    }}
-                    aria-label={`${place.title} 경로에 포함`}
-                    style={{ margin: '0 8px 0 0', flexShrink: 0 }}
-                  />
-                  <span
-                    draggable
-                    onDragStart={() => setDraggedItem({ day, index: idx })}
-                    onDragOver={(event) => event.preventDefault()}
-                    onDrop={() => {
-                      if (draggedItem && draggedItem.day === day) {
-                        onReorder(day, draggedItem.index, idx);
-                      }
-                      setDraggedItem(null);
-                    }}
-                    onDragEnd={() => setDraggedItem(null)}
-                    style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '230px', flex: 1 }}
-                  >
-                    <strong>{idx + 1}. {place.title}</strong>
-                  </span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <button
-                      onClick={() => onReorder(day, idx, idx - 1)}
-                      disabled={idx === 0}
-                      aria-label="위로 이동"
-                      title="위로 이동"
-                      style={{
-                        width: '24px',
-                        height: '24px',
-                        padding: 0,
-                        border: 'none',
-                        background: 'transparent',
-                        color: idx === 0 ? '#ccc' : '#555',
-                        cursor: idx === 0 ? 'default' : 'pointer',
-                        fontSize: '18px',
-                        lineHeight: 1
-                      }}
-                    >
-                      ↑
-                    </button>
-                    <button
-                      onClick={() => onDeletePlace(day, idx)}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        color: '#ff4d4f',
-                        cursor: 'pointer',
-                        fontSize: '12px'
-                      }}
-                    >
-                      삭제
-                    </button>
-                  </div>
-                </li>
-                );
-              })}
-            </ul>
-          )}
-
-          <button 
-            onClick={() => onOptimize(day, getSelectedPlaces(day))}
-            style={{
-              width: '100%',
-              padding: '10px',
-              backgroundColor: '#007bff',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '5px',
-              fontWeight: 'bold',
-              cursor: 'pointer'
-            }}
-          >
-            선택한 장소 대중교통 경로 만들기
-          </button>
+    <aside className="sidebar">
+      <div className="trip-summary">
+        <div>
+          <p>{profile.travelerName}의 여행</p>
+          <h2>{days[0]?.displayDate} - {days[days.length - 1]?.displayDate}</h2>
         </div>
-      ))}
-    </div>
+        <button onClick={onResetTrip}>날짜 변경</button>
+      </div>
+
+      <section className="share-panel" aria-label="공유하기">
+        <button className="share-button" onClick={onSharePlan} disabled={shareStatus.isSaving}>
+          {shareStatus.isSaving ? '링크 만드는 중...' : '공유 링크 만들기'}
+        </button>
+
+        {shareStatus.url && (
+          <div className="share-result">
+            <p>{shareStatus.copied ? '링크를 클립보드에 복사했어요.' : '아래 링크를 복사해서 보내주세요.'}</p>
+            <input readOnly value={shareStatus.url} onFocus={(event) => event.target.select()} />
+          </div>
+        )}
+      </section>
+
+      <Search days={days} onAddPlace={onAddPlace} />
+
+      <div className="day-list">
+        {days.map((day) => {
+          const places = itinerary[day.key] || [];
+
+          return (
+            <section className="day-panel" key={day.key}>
+              <header>
+                <div>
+                  <h3>{day.label}</h3>
+                  <span>{day.displayDate}</span>
+                </div>
+                <span>{places.length}곳</span>
+              </header>
+
+              {places.length === 0 ? (
+                <p className="empty-state">아직 추가한 장소가 없어요.</p>
+              ) : (
+                <ul className="place-list">
+                  {places.map((place, index) => {
+                    const placeKey = getPlaceKey(day.key, place);
+                    const selectedKeys = selectedPlaces[day.key];
+                    const isSelected = !selectedKeys || selectedKeys.includes(placeKey);
+
+                    return (
+                      <li
+                        key={placeKey}
+                        ref={(element) => itemRefs.current.set(placeKey, element)}
+                        draggable
+                        onDragStart={() => setDraggedItem({ day: day.key, index })}
+                        onDragOver={(event) => event.preventDefault()}
+                        onDrop={() => {
+                          if (draggedItem && draggedItem.day === day.key) {
+                            onReorder(day.key, draggedItem.index, index);
+                          }
+                          setDraggedItem(null);
+                        }}
+                        onDragEnd={() => setDraggedItem(null)}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => {
+                            const currentKeys = selectedKeys || places.map((item) => getPlaceKey(day.key, item));
+                            setSelectedPlaces((previous) => ({
+                              ...previous,
+                              [day.key]: isSelected
+                                ? currentKeys.filter((key) => key !== placeKey)
+                                : [...currentKeys, placeKey],
+                            }));
+                          }}
+                          aria-label={`${place.title} 경로에 포함`}
+                        />
+
+                        <strong title={place.title}>{index + 1}. {place.title}</strong>
+
+                        <div className="place-actions">
+                          <button
+                            onClick={() => onReorder(day.key, index, index - 1)}
+                            disabled={index === 0}
+                            aria-label="위로 이동"
+                            title="위로 이동"
+                          >
+                            ↑
+                          </button>
+                          <button
+                            onClick={() => onDeletePlace(day.key, index)}
+                            aria-label={`${place.title} 삭제`}
+                            title="삭제"
+                          >
+                            삭제
+                          </button>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+
+              <button className="optimize-button" onClick={() => onOptimize(day.key, getSelectedPlaces(day.key))}>
+                선택한 장소로 경로 만들기
+              </button>
+            </section>
+          );
+        })}
+      </div>
+    </aside>
   );
 };
 
