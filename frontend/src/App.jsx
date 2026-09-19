@@ -31,11 +31,29 @@ function App() {
     }));
   };
 
+  const handleReorderPlaces = (day, fromIndex, toIndex) => {
+    if (fromIndex === toIndex) return;
+
+    setItinerary(prev => {
+      const places = [...prev[day]];
+      const [movedPlace] = places.splice(fromIndex, 1);
+      places.splice(toIndex, 0, movedPlace);
+      return { ...prev, [day]: places };
+    });
+    setCurrentPlaces([]);
+    setCurrentRoute(null);
+  };
+
   const handleOptimizeRoute = async (day) => {
     const places = itinerary[day];
     
     if (places.length < 2) {
       alert('동선을 계산하려면 장소가 2개 이상 필요합니다.');
+      return;
+    }
+
+    if (places.some(place => !Number.isFinite(place.lat) || !Number.isFinite(place.lng))) {
+      alert('장소 좌표를 확인할 수 없습니다. 검색 결과를 다시 추가해주세요.');
       return;
     }
 
@@ -61,7 +79,11 @@ function App() {
       
     } catch (error) {
       console.error('경로 탐색 중 오류 발생:', error);
-      alert('실제 도로 기준 경로를 찾을 수 없습니다. 섬이나 바다를 건너는 구간이 있는지 확인해주세요.');
+      const details = error.response?.data?.details;
+      const message = typeof details === 'string'
+        ? details
+        : details?.message || details?.error?.message;
+      alert(message || '경로 탐색에 실패했습니다. 출발지와 도착지의 위치를 확인해주세요.');
     }
   };
 
@@ -72,6 +94,7 @@ function App() {
         itinerary={itinerary}
         onAddPlace={handleAddPlace}
         onDeletePlace={handleDeletePlace}
+        onReorder={handleReorderPlaces}
         onOptimize={handleOptimizeRoute}
       />
       

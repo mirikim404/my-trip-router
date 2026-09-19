@@ -22,22 +22,22 @@ const Search = ({ onAddPlace }) => {
   };
 
   const handleAdd = (day, item) => {
-    if (!window.naver || !window.naver.maps) {
-      return alert('지도 API가 로드되지 않았습니다. 잠시 후 다시 시도해주세요.');
-    }
-
     const cleanTitle = item.title.replace(/<[^>]*>?/gm, '');
-    const tm128Point = new window.naver.maps.Point(
-      parseInt(item.mapx, 10),
-      parseInt(item.mapy, 10)
-    );
-    const latLng = window.naver.maps.TransCoord.fromTM128ToLatLng(tm128Point);
+    const rawLongitude = Number(item.mapx);
+    const rawLatitude = Number(item.mapy);
+    const longitude = Math.abs(rawLongitude) > 180 ? rawLongitude / 10000000 : rawLongitude;
+    const latitude = Math.abs(rawLatitude) > 90 ? rawLatitude / 10000000 : rawLatitude;
+
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      alert('검색 결과의 위치를 변환하지 못했습니다. 다른 장소를 선택해주세요.');
+      return;
+    }
 
     onAddPlace(day, {
       title: cleanTitle,
       address: item.address,
-      lat: latLng.y,
-      lng: latLng.x
+      lat: latitude,
+      lng: longitude
     });
   };
 
