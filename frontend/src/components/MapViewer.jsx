@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
+import { resolveApiUrl } from '../api/config';
 
-const MapViewer = ({ places, routeData }) => {
+const MapViewer = ({ places, routeData, fitToPlaces = false }) => {
   const mapElement = useRef(null);
   const mapInstance = useRef(null);
   const polylineInstances = useRef([]);
@@ -8,7 +9,7 @@ const MapViewer = ({ places, routeData }) => {
   const infoWindow = useRef(null);
   const selectedMarker = useRef(null);
 
-  const escapeHtml = (value = '') => value
+  const escapeHtml = (value) => String(value ?? '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
@@ -25,6 +26,11 @@ const MapViewer = ({ places, routeData }) => {
       mapInstance.current = new window.naver.maps.Map(mapElement.current, {
         center: new window.naver.maps.LatLng(37.5666805, 126.9784147),
         zoom: 13,
+      });
+
+      window.naver.maps.Event.addListener(mapInstance.current, 'click', () => {
+        selectedMarker.current = null;
+        infoWindow.current?.close();
       });
     }
   }, []);
@@ -60,7 +66,7 @@ const MapViewer = ({ places, routeData }) => {
         const placeSubcategory = escapeHtml(place.subcategory);
         const placeLink = escapeHtml(place.link);
         const naverMapLink = escapeHtml(place.naverMapLink);
-        const photoUrl = escapeHtml(place.photoUrl);
+        const photoUrl = escapeHtml(resolveApiUrl(place.photoUrl));
         const googleMapsUri = escapeHtml(place.googleMapsUri);
         const primaryType = escapeHtml(place.primaryType);
         const averageMenuPrice = Number(place.averageMenuPrice);
@@ -112,7 +118,18 @@ const MapViewer = ({ places, routeData }) => {
         markers.current.push(marker);
       });
 
-      mapInstance.current.setCenter(new window.naver.maps.LatLng(places[0].lat, places[0].lng));
+      if (fitToPlaces && places.length > 1) {
+        const lats = places.map((place) => place.lat);
+        const lngs = places.map((place) => place.lng);
+        const bounds = new window.naver.maps.LatLngBounds(
+          new window.naver.maps.LatLng(Math.min(...lats), Math.min(...lngs)),
+          new window.naver.maps.LatLng(Math.max(...lats), Math.max(...lngs)),
+        );
+        mapInstance.current.fitBounds(bounds, { top: 48, right: 32, bottom: 32, left: 32 });
+      } else {
+        mapInstance.current.setCenter(new window.naver.maps.LatLng(places[0].lat, places[0].lng));
+        if (fitToPlaces) mapInstance.current.setZoom(15);
+      }
     }
 
     if (routeData?.provider === 'google-transit') {
@@ -139,7 +156,7 @@ const MapViewer = ({ places, routeData }) => {
       });
       polylineInstances.current.push(polyline);
     }
-  }, [places, routeData]);
+  }, [places, routeData, fitToPlaces]);
 
   return <div ref={mapElement} style={{ width: '100%', height: '100%' }} />;
 };

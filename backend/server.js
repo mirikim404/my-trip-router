@@ -8,7 +8,7 @@ require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const app = express();
 app.use(cors());
-app.use(express.json({ limit: '5mb' }));
+app.use(express.json({ limit: '1mb' }));
 
 const DATA_DIR = path.join(__dirname, 'data');
 const PLANS_FILE = path.join(DATA_DIR, 'plans.json');
@@ -30,10 +30,47 @@ const readPlans = () => {
 
 const writePlans = (plans) => {
   ensurePlanStore();
-  fs.writeFileSync(PLANS_FILE, JSON.stringify(plans, null, 2), 'utf8');
+  const tempFile = `${PLANS_FILE}.tmp`;
+  fs.writeFileSync(tempFile, JSON.stringify(plans, null, 2), 'utf8');
+  fs.renameSync(tempFile, PLANS_FILE);
 };
 
 const createPlanId = () => crypto.randomBytes(5).toString('base64url');
+
+const MAX_DAYS = 31;
+const MAX_PLACES_PER_DAY = 50;
+
+// 공유 저장 요청 검증 + 필요한 필드만 남기기
+const sanitizePlan = ({ profile, itinerary } = {}) => {
+  if (typeof profile?.travelerName !== 'string' || !profile.travelerName.trim()) return null;
+  if (!Array.isArray(profile.days) || profile.days.length === 0 || profile.days.length > MAX_DAYS) return null;
+  if (!itinerary || typeof itinerary !== 'object' || Array.isArray(itinerary)) return null;
+
+  const days = profile.days.map(({ key, label, date, displayDate } = {}) => ({ key, label, date, displayDate }));
+  if (days.some((day) => typeof day.key !== 'string' || !day.key)) return null;
+
+  const cleanItinerary = {};
+  for (const day of days) {
+    const places = itinerary[day.key] ?? [];
+    const isValid = Array.isArray(places)
+      && places.length <= MAX_PLACES_PER_DAY
+      && places.every((place) => (
+        typeof place?.title === 'string' && Number.isFinite(place.lat) && Number.isFinite(place.lng)
+      ));
+    if (!isValid) return null;
+    cleanItinerary[day.key] = places;
+  }
+
+  return {
+    profile: {
+      travelerName: profile.travelerName.trim().slice(0, 50),
+      startDate: profile.startDate,
+      endDate: profile.endDate,
+      days,
+    },
+    itinerary: cleanItinerary,
+  };
+};
 
 const {
   NCP_MAP_CLIENT_ID,
@@ -75,25 +112,25 @@ const decodePolyline = (encoded) => {
   return points;
 };
 
-// 1. 장소 검색 API 프록시 (NAVER API HUB - 지역 검색)
+// 일정 공유: 저장(POST) / 조회(GET)
 app.post('/api/plans', (req, res) => {
   try {
-    const { profile, itinerary } = req.body;
+    const cleanPlan = sanitizePlan(req.body);
 
-    if (!profile?.travelerName || !Array.isArray(profile?.days) || typeof itinerary !== 'object') {
+    if (!cleanPlan) {
       return res.status(400).json({ error: 'Invalid plan payload.' });
     }
 
     const plans = readPlans();
     let id = createPlanId();
-    while (plans[id]) id = createPlanId();
+    while (Object.hasOwn(plans, id)) id = createPlanId();
 
+    const now = new Date().toISOString();
     plans[id] = {
       id,
-      profile,
-      itinerary,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      ...cleanPlan,
+      createdAt: now,
+      updatedAt: now,
     };
     writePlans(plans);
 
@@ -107,7 +144,7 @@ app.post('/api/plans', (req, res) => {
 app.get('/api/plans/:id', (req, res) => {
   try {
     const plans = readPlans();
-    const plan = plans[req.params.id];
+    const plan = Object.hasOwn(plans, req.params.id) ? plans[req.params.id] : null;
 
     if (!plan) return res.status(404).json({ error: 'Plan not found.' });
     res.json(plan);
@@ -117,6 +154,7 @@ app.get('/api/plans/:id', (req, res) => {
   }
 });
 
+// 장소 검색 API 프록시 (NAVER API HUB - 지역 검색)
 app.get('/api/search', async (req, res) => {
   try {
     const { query } = req.query;
@@ -306,6 +344,17 @@ app.post('/api/directions', async (req, res) => {
     res.status(status).json({ error: 'Directions API Error', details });
   }
 });
+
+// 배포용: 빌드된 프론트(frontend/dist)를 같은 서버에서 서빙해요. (npm run build 후)
+// /share/:id 같은 프론트 라우트는 index.html로 넘겨요. (Express 5는 '*' 패턴이 바뀌어서 미들웨어로 처리)
+const FRONTEND_DIST = path.join(__dirname, '..', 'frontend', 'dist');
+if (fs.existsSync(path.join(FRONTEND_DIST, 'index.html'))) {
+  app.use(express.static(FRONTEND_DIST));
+  app.use((req, res, next) => {
+    if (req.method !== 'GET' || req.path.startsWith('/api/')) return next();
+    res.sendFile(path.join(FRONTEND_DIST, 'index.html'));
+  });
+}
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {

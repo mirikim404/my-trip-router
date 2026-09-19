@@ -11,6 +11,7 @@
 - **일정 관리**: Day 1, Day 2 등 일자별 장소 목록 관리 (로컬 스토리지 자동 저장)
 - **동선 최적화**: 선택한 장소들의 위경도를 분석하여 최단 거리 방문 순서 정렬 (Nearest Neighbor 알고리즘)
 - **경로 시각화**: 네이버 Directions 5 API를 활용한 실제 도로 기준 길찾기 및 지도 렌더링
+- **일정 공유**: 공유 링크(`/share/<id>`)로 친구가 로그인 없이 모바일에서 일정과 지도를 읽기 전용으로 확인
 
 ## 🛠️ 기술 스택
 - **Frontend**: React(Vite), Axios
@@ -46,3 +47,13 @@ node server.js
 
 ### 3. 접속
 브라우저에서 `http://localhost:5173` (Vite 기본 포트)로 접속하여 앱을 이용합니다.
+
+## 🔗 일정 공유하기
+
+사이드바의 **공유 링크 만들기**를 누르면 일정이 백엔드(`backend/data/plans.json`)에 저장되고 `/share/<id>` 링크가 만들어집니다. 링크를 열면 로그인 없이 읽기 전용 화면이 열려요.
+
+- **같은 Wi-Fi에서 확인**: PC의 내부 IP로 접속(`http://<PC-IP>:5173`)해서 링크를 만든 뒤 폰에서 열기
+- **친구에게 임시로 보내기**: `cloudflared tunnel --url http://localhost:5173` 또는 `ngrok http 5173`으로 나온 주소로 접속해서 링크를 만들기 (그 주소가 링크에 들어가요)
+- **배포**: `cd frontend && npm run build` 후 `cd backend && npm start` — 서버 하나가 화면(`frontend/dist`)과 `/api`를 함께 서빙해요
+- **네이버 지도**: NCP 콘솔의 Web 서비스 URL에 접속 주소(내부 IP, 터널/배포 도메인)를 등록해야 지도가 표시돼요
+- 선택 환경 변수(`frontend/.env`): `VITE_PUBLIC_BASE_URL`(공유 링크 기준 주소), `VITE_API_BASE_URL`(API를 다른 주소에 둘 때)

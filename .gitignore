@@ -15,6 +15,9 @@ backend/node_modules/
 .env.local
 backend/.env
 
+# 공유 일정 저장소 (서버가 만드는 데이터)
+backend/data/
+
 # Build outputs
 frontend/dist/
 dist/

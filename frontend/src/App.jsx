@@ -4,6 +4,7 @@ import Sidebar from './components/Sidebar';
 import MapViewer from './components/MapViewer';
 import { fetchTransitDirections } from './api/naverApi';
 import { fetchSharedPlan, saveSharedPlan } from './api/shareApi';
+import { PUBLIC_BASE_URL, resolveApiUrl } from './api/config';
 
 const PROFILE_STORAGE_KEY = 'myTripProfile';
 const PLAN_STORAGE_KEY = 'myTripPlan';
@@ -161,6 +162,7 @@ function SharePlanPage({ shareId }) {
         const sharedPlan = await fetchSharedPlan(shareId);
         setPlan(sharedPlan);
         setSelectedDay(sharedPlan.profile.days[0]?.key || '');
+        document.title = `${sharedPlan.profile.travelerName}의 여행 · My Trip Router`;
         setStatus('ready');
       } catch (error) {
         console.error('공유 일정을 불러오지 못했습니다:', error);
@@ -228,7 +230,7 @@ function SharePlanPage({ shareId }) {
             <ol>
               {places.map((place, index) => (
                 <li key={`${place.title}-${place.lat}-${place.lng}-${index}`}>
-                  {place.photoUrl && <img src={place.photoUrl} alt="" />}
+                  {place.photoUrl && <img src={resolveApiUrl(place.photoUrl)} alt="" loading="lazy" />}
                   <div>
                     <strong>{place.title}</strong>
                     <span>{place.roadAddress || place.address || '주소 정보 없음'}</span>
@@ -242,7 +244,7 @@ function SharePlanPage({ shareId }) {
       </section>
 
       <section className="share-map" aria-label="지도">
-        <MapViewer places={places} routeData={null} />
+        <MapViewer places={places} routeData={null} fitToPlaces />
       </section>
     </main>
   );
@@ -306,7 +308,7 @@ function App() {
 
     try {
       const { id } = await saveSharedPlan({ profile, itinerary });
-      const url = `${window.location.origin}/share/${id}`;
+      const url = `${PUBLIC_BASE_URL || window.location.origin}/share/${id}`;
 
       let copied = false;
       try {

@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import axios from 'axios';
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+import { API_BASE_URL } from '../api/config';
 
 const Search = ({ days, onAddPlace }) => {
   const [keyword, setKeyword] = useState('');
@@ -48,9 +47,6 @@ const Search = ({ days, onAddPlace }) => {
         lng: longitude,
       });
       googleDetails = detailsResponse.data;
-      if (googleDetails.photoUrl?.startsWith('/')) {
-        googleDetails.photoUrl = `${API_BASE_URL}${googleDetails.photoUrl}`;
-      }
     } catch (error) {
       console.warn('Google 장소 상세 정보를 불러오지 못했습니다.', error);
     }
