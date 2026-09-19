@@ -3,12 +3,20 @@ import Search from './Search';
 
 const Sidebar = ({ itinerary, onAddPlace, onDeletePlace, onReorder, onOptimize }) => {
   const [draggedItem, setDraggedItem] = useState(null);
+  const [selectedPlaces, setSelectedPlaces] = useState({});
   const itemRefs = useRef(new Map());
   const previousPositions = useRef(new Map());
 
   const getPlaceKey = (day, place) => (
     place.id || `${day}-${place.title}-${place.address || ''}-${place.lat}-${place.lng}`
   );
+
+  const getSelectedPlaces = (day) => {
+    const selectedKeys = selectedPlaces[day];
+    return itinerary[day].filter((place) => (
+      !selectedKeys || selectedKeys.includes(getPlaceKey(day, place))
+    ));
+  };
 
   useLayoutEffect(() => {
     const nextPositions = new Map();
@@ -64,6 +72,8 @@ const Sidebar = ({ itinerary, onAddPlace, onDeletePlace, onReorder, onOptimize }
             <ul style={{ paddingLeft: '0', listStyle: 'none', margin: '0 0 10px 0' }}>
               {itinerary[day].map((place, idx) => {
                 const placeKey = getPlaceKey(day, place);
+                const selectedKeys = selectedPlaces[day];
+                const isSelected = !selectedKeys || selectedKeys.includes(placeKey);
 
                 return (
                 <li key={placeKey} ref={(element) => itemRefs.current.set(placeKey, element)} style={{
@@ -75,6 +85,21 @@ const Sidebar = ({ itinerary, onAddPlace, onDeletePlace, onReorder, onOptimize }
                   fontSize: '13px',
                   cursor: 'grab'
                 }}>
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => {
+                      const currentKeys = selectedKeys || itinerary[day].map(item => getPlaceKey(day, item));
+                      setSelectedPlaces(prev => ({
+                        ...prev,
+                        [day]: isSelected
+                          ? currentKeys.filter(key => key !== placeKey)
+                          : [...currentKeys, placeKey]
+                      }));
+                    }}
+                    aria-label={`${place.title} 경로에 포함`}
+                    style={{ margin: '0 8px 0 0', flexShrink: 0 }}
+                  />
                   <span
                     draggable
                     onDragStart={() => setDraggedItem({ day, index: idx })}
@@ -130,7 +155,7 @@ const Sidebar = ({ itinerary, onAddPlace, onDeletePlace, onReorder, onOptimize }
           )}
 
           <button 
-            onClick={() => onOptimize(day)}
+            onClick={() => onOptimize(day, getSelectedPlaces(day))}
             style={{
               width: '100%',
               padding: '10px',
@@ -142,7 +167,7 @@ const Sidebar = ({ itinerary, onAddPlace, onDeletePlace, onReorder, onOptimize }
               cursor: 'pointer'
             }}
           >
-            {day.toUpperCase()} 최적 동선 만들기
+            선택한 장소 대중교통 경로 만들기
           </button>
         </div>
       ))}

@@ -21,8 +21,9 @@ const Search = ({ onAddPlace }) => {
     }
   };
 
-  const handleAdd = (day, item) => {
+  const handleAdd = async (day, item) => {
     const cleanTitle = item.title.replace(/<[^>]*>?/gm, '');
+    const categories = (item.category || '').split('>').map(category => category.trim()).filter(Boolean);
     const rawLongitude = Number(item.mapx);
     const rawLatitude = Number(item.mapy);
     const longitude = Math.abs(rawLongitude) > 180 ? rawLongitude / 10000000 : rawLongitude;
@@ -33,9 +34,33 @@ const Search = ({ onAddPlace }) => {
       return;
     }
 
+    let googleDetails = {};
+    try {
+      const detailsResponse = await axios.post(`${API_BASE_URL}/api/place-details`, {
+        title: cleanTitle,
+        address: item.roadAddress || item.address,
+        lat: latitude,
+        lng: longitude
+      });
+      googleDetails = detailsResponse.data;
+      if (googleDetails.photoUrl?.startsWith('/')) {
+        googleDetails.photoUrl = `${API_BASE_URL}${googleDetails.photoUrl}`;
+      }
+    } catch (error) {
+      console.warn('Google 장소 상세 정보를 불러오지 못했습니다.', error);
+    }
+
     onAddPlace(day, {
       title: cleanTitle,
       address: item.address,
+      roadAddress: item.roadAddress,
+      category: item.category,
+      placeType: categories[0] || '',
+      subcategory: categories.slice(1).join(' > '),
+      telephone: item.telephone,
+      link: item.link,
+      naverMapLink: `https://map.naver.com/p/search/${encodeURIComponent(cleanTitle)}`,
+      ...googleDetails,
       lat: latitude,
       lng: longitude
     });

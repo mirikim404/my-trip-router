@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import MapViewer from './components/MapViewer';
-import { optimizeRouteNearestNeighbor } from './utils/tspAlgo';
-import { fetchDirections } from './api/naverApi';
+import { fetchTransitDirections } from './api/naverApi';
 
 function App() {
   const [itinerary, setItinerary] = useState(() => {
@@ -44,11 +43,11 @@ function App() {
     setCurrentRoute(null);
   };
 
-  const handleOptimizeRoute = async (day) => {
-    const places = itinerary[day];
+  const handleOptimizeRoute = async (day, selectedPlaces) => {
+    const places = selectedPlaces;
     
     if (places.length < 2) {
-      alert('동선을 계산하려면 장소가 2개 이상 필요합니다.');
+      alert('경로를 만들 장소를 2개 이상 선택해주세요.');
       return;
     }
 
@@ -57,26 +56,11 @@ function App() {
       return;
     }
 
-    const optimizedPlaces = optimizeRouteNearestNeighbor(places);
-    setCurrentPlaces(optimizedPlaces);
-
-    const start = `${optimizedPlaces[0].lng},${optimizedPlaces[0].lat}`;
-    const goal = `${optimizedPlaces[optimizedPlaces.length - 1].lng},${optimizedPlaces[optimizedPlaces.length - 1].lat}`;
-    
-    let waypoints = '';
-    if (optimizedPlaces.length > 2) {
-      waypoints = optimizedPlaces.slice(1, -1).map(p => `${p.lng},${p.lat}`).join('|');
-    }
-
     try {
-      const routeData = await fetchDirections(start, goal, waypoints);
+      const routeData = await fetchTransitDirections(places);
+      const optimizedPlaces = routeData.places || places;
+      setCurrentPlaces(optimizedPlaces);
       setCurrentRoute(routeData);
-
-      setItinerary(prev => ({
-        ...prev,
-        [day]: optimizedPlaces
-      }));
-      
     } catch (error) {
       console.error('경로 탐색 중 오류 발생:', error);
       const details = error.response?.data?.details;

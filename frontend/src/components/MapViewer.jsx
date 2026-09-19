@@ -3,7 +3,7 @@ import { useEffect, useRef } from 'react';
 const MapViewer = ({ places, routeData }) => {
   const mapElement = useRef(null);
   const mapInstance = useRef(null);
-  const polylineInstance = useRef(null);
+  const polylineInstances = useRef([]);
   const markers = useRef([]);
   const infoWindow = useRef(null);
   const selectedMarker = useRef(null);
@@ -32,7 +32,8 @@ const MapViewer = ({ places, routeData }) => {
   useEffect(() => {
     if (!mapInstance.current || !window.naver) return;
 
-    if (polylineInstance.current) polylineInstance.current.setMap(null);
+    polylineInstances.current.forEach(polyline => polyline.setMap(null));
+    polylineInstances.current = [];
     if (infoWindow.current) infoWindow.current.close();
     selectedMarker.current = null;
     markers.current.forEach(marker => marker.setMap(null));
@@ -53,11 +54,28 @@ const MapViewer = ({ places, routeData }) => {
         const isGoal = index === places.length - 1;
         const markerColor = isStart ? '#16a34a' : isGoal ? '#dc2626' : '#2563eb';
         const placeTitle = escapeHtml(place.title);
-        const placeAddress = escapeHtml(place.address);
+        const placeRoadAddress = escapeHtml(place.roadAddress || place.address);
+        const placeCategory = escapeHtml(place.category);
+        const placeType = escapeHtml(place.placeType);
+        const placeSubcategory = escapeHtml(place.subcategory);
+        const placeTelephone = escapeHtml(place.telephone);
+        const placeLink = escapeHtml(place.link);
+        const naverMapLink = escapeHtml(place.naverMapLink);
+        const photoUrl = escapeHtml(place.photoUrl);
+        const googleMapsUri = escapeHtml(place.googleMapsUri);
+        const primaryType = escapeHtml(place.primaryType);
+        const averageMenuPrice = Number(place.averageMenuPrice);
+        const telephone = escapeHtml(place.nationalPhoneNumber || place.telephone);
         const infoContent = `
-          <div style="padding:10px 12px;border:1px solid #dbe3ef;border-radius:8px;background:#fff;box-shadow:0 4px 14px rgba(15,23,42,.18);font-family:sans-serif;min-width:150px;">
-            <strong style="display:block;margin-bottom:4px;color:#111827;">${index + 1}. ${placeTitle}</strong>
-            <span style="color:#64748b;font-size:12px;">${placeAddress || '주소 정보 없음'}</span>
+          <div style="padding:12px 14px;border:1px solid #dbe3ef;border-radius:10px;background:#fff;box-shadow:0 4px 14px rgba(15,23,42,.18);font-family:sans-serif;width:260px;">
+            ${photoUrl ? `<img src="${photoUrl}" alt="${placeTitle}" style="display:block;width:calc(100% + 28px);height:160px;object-fit:cover;object-position:center center;margin:-12px -14px 10px;border-radius:10px 10px 0 0;">` : ''}
+            <strong style="display:block;margin-bottom:5px;color:#111827;font-size:14px;">${index + 1}. ${placeTitle}</strong>
+            ${primaryType || placeType ? `<span style="display:block;margin-bottom:3px;color:#2563eb;font-size:11px;">${primaryType || placeType}</span>` : ''}
+            ${placeSubcategory ? `<span style="display:block;margin-bottom:7px;color:#64748b;font-size:11px;">${placeSubcategory}</span>` : placeCategory ? `<span style="display:block;margin-bottom:7px;color:#64748b;font-size:11px;">${placeCategory}</span>` : ''}
+            <span style="display:block;color:#475569;font-size:12px;line-height:1.45;">${placeRoadAddress || '주소 정보 없음'}</span>
+            ${telephone ? `<a href="tel:${telephone}" style="display:block;margin-top:7px;color:#334155;font-size:12px;text-decoration:none;">☎ ${telephone}</a>` : ''}
+            ${Number.isFinite(averageMenuPrice) ? `<span style="display:block;margin-top:7px;color:#64748b;font-size:11px;">평균 메뉴 가격: ${averageMenuPrice.toLocaleString('ko-KR')}원</span>` : ''}
+            ${naverMapLink ? `<a href="${naverMapLink}" target="_blank" rel="noreferrer" style="display:inline-block;margin-top:8px;color:#2563eb;font-size:12px;text-decoration:none;">네이버 지도에서 보기 ↗</a>` : placeLink ? `<a href="${placeLink}" target="_blank" rel="noreferrer" style="display:inline-block;margin-top:8px;color:#2563eb;font-size:12px;text-decoration:none;">네이버에서 자세히 보기 ↗</a>` : googleMapsUri ? `<a href="${googleMapsUri}" target="_blank" rel="noreferrer" style="display:inline-block;margin-top:8px;color:#2563eb;font-size:12px;text-decoration:none;">Google에서 자세히 보기 ↗</a>` : ''}
           </div>
         `;
         const marker = new window.naver.maps.Marker({
@@ -98,17 +116,29 @@ const MapViewer = ({ places, routeData }) => {
       mapInstance.current.setCenter(new window.naver.maps.LatLng(places[0].lat, places[0].lng));
     }
 
-    if (routeData && routeData.route && routeData.route.traoptimal) {
+    if (routeData?.provider === 'google-transit') {
+      routeData.legs.flatMap(leg => leg.paths || []).forEach(path => {
+        const polyline = new window.naver.maps.Polyline({
+          path: path.map(point => new window.naver.maps.LatLng(point.lat, point.lng)),
+          strokeColor: '#2563eb',
+          strokeOpacity: 0.8,
+          strokeWeight: 5,
+          map: mapInstance.current,
+        });
+        polylineInstances.current.push(polyline);
+      });
+    } else if (routeData && routeData.route && routeData.route.traoptimal) {
       const pathArr = routeData.route.traoptimal[0].path;
       const polylinePath = pathArr.map(coord => new window.naver.maps.LatLng(coord[1], coord[0]));
 
-      polylineInstance.current = new window.naver.maps.Polyline({
+      const polyline = new window.naver.maps.Polyline({
         path: polylinePath,
         strokeColor: '#007bff',
         strokeOpacity: 0.8,
         strokeWeight: 6,
         map: mapInstance.current,
       });
+      polylineInstances.current.push(polyline);
     }
   }, [places, routeData]);
 
