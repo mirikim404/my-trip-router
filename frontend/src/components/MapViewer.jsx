@@ -143,18 +143,6 @@ const MapViewer = ({ places, routeData, fitToPlaces = false }) => {
         });
         polylineInstances.current.push(polyline);
       });
-    } else if (routeData && routeData.route && routeData.route.traoptimal) {
-      const pathArr = routeData.route.traoptimal[0].path;
-      const polylinePath = pathArr.map(coord => new window.naver.maps.LatLng(coord[1], coord[0]));
-
-      const polyline = new window.naver.maps.Polyline({
-        path: polylinePath,
-        strokeColor: '#007bff',
-        strokeOpacity: 0.8,
-        strokeWeight: 6,
-        map: mapInstance.current,
-      });
-      polylineInstances.current.push(polyline);
     }
   }, [places, routeData, fitToPlaces]);
 

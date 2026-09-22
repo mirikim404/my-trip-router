@@ -326,24 +326,7 @@ app.post('/api/transit', async (req, res) => {
   }
 });
 
-app.post('/api/directions', async (req, res) => {
-  try {
-    const { start, goal, waypoints } = req.body;
-    const response = await axios.get('https://maps.apigw.ntruss.com/map-direction-15/v1/driving', {
-      params: { start, goal, waypoints },
-      headers: {
-        'x-ncp-apigw-api-key-id': NCP_MAP_CLIENT_ID,
-        'x-ncp-apigw-api-key': NCP_MAP_CLIENT_SECRET,
-      },
-    });
-    res.json(response.data);
-  } catch (error) {
-    const status = error.response?.status || 500;
-    const details = error.response?.data || error.message;
-    console.error('길찾기 API 에러:', details);
-    res.status(status).json({ error: 'Directions API Error', details });
-  }
-});
+
 
 // 배포용: 빌드된 프론트(frontend/dist)를 같은 서버에서 서빙해요. (npm run build 후)
 // /share/:id 같은 프론트 라우트는 index.html로 넘겨요. (Express 5는 '*' 패턴이 바뀌어서 미들웨어로 처리)
