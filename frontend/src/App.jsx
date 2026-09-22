@@ -153,10 +153,44 @@ function SignupScreen({ onCreateTrip }) {
   );
 }
 
+// 공유 화면의 진입 페이지: 트래블러 이름/날짜 같은, 지도를 볼 때는 필요
+// 없는 정보와 day 선택을 여기서 한 번에 끝낸다. 이후 지도 페이지에는
+// 선택한 day 하나만 남기고, 이 정보들은 다시 보여주지 않는다.
+function ShareEntryPage({ profile, itinerary, onSelectDay }) {
+  const days = profile.days || [];
+
+  return (
+    <main className="share-entry">
+      <header className="share-entry-hero">
+        <p>공유된 여행 일정</p>
+        <h1>{profile.travelerName}의 여행</h1>
+        <span>{days[0]?.displayDate} - {days[days.length - 1]?.displayDate}</span>
+      </header>
+
+      <div className="share-entry-days">
+        {days.map((day) => (
+          <button
+            key={day.key}
+            type="button"
+            className="share-entry-day"
+            onClick={() => onSelectDay(day.key)}
+          >
+            <strong>{day.label}</strong>
+            <span>{day.displayDate}</span>
+            <em>{itinerary[day.key]?.length || 0}곳</em>
+          </button>
+        ))}
+      </div>
+    </main>
+  );
+}
+
 function SharePlanPage({ shareId }) {
   const [plan, setPlan] = useState(null);
   const [selectedDay, setSelectedDay] = useState('');
   const [status, setStatus] = useState('loading');
+  // 'select': day를 고르는 진입 페이지 / 'map': 고른 day의 지도 페이지
+  const [view, setView] = useState('select');
 
   const {
     sheetHeight,
@@ -203,9 +237,22 @@ function SharePlanPage({ shareId }) {
 
   const { profile, itinerary, routesByDay = {} } = plan;
   const days = profile.days || [];
+
+  if (view === 'select') {
+    return (
+      <ShareEntryPage
+        profile={profile}
+        itinerary={itinerary}
+        onSelectDay={(dayKey) => {
+          setSelectedDay(dayKey);
+          setView('map');
+        }}
+      />
+    );
+  }
+
   const activeDay = days.find((day) => day.key === selectedDay) || days[0];
   const places = activeDay ? itinerary[activeDay.key] || [] : [];
-  const totalPlaces = days.reduce((total, day) => total + (itinerary[day.key]?.length || 0), 0);
   const activeDayRoute = activeDay ? routesByDay[activeDay.key] : null;
   // 경로가 만들어져 있으면 정렬된 순서(출발→도착)로 지도를 그리고, 없으면
   // 저장된 목록 그대로 마커만 보여준다.
@@ -240,24 +287,15 @@ function SharePlanPage({ shareId }) {
           }}
         />
 
-        <header className="share-hero">
-          <p>공유된 여행 일정</p>
-          <h1>{profile.travelerName}의 여행</h1>
-          <span>{days[0]?.displayDate} - {days[days.length - 1]?.displayDate} · {totalPlaces}곳</span>
-        </header>
-
-        <nav className="share-day-tabs" aria-label="날짜 선택">
-          {days.map((day) => (
-            <button
-              key={day.key}
-              className={day.key === activeDay?.key ? 'active' : ''}
-              onClick={() => setSelectedDay(day.key)}
-            >
-              <strong>{day.label}</strong>
-              <span>{day.displayDate}</span>
-            </button>
-          ))}
-        </nav>
+        <div className="share-sheet-topbar">
+          <button
+            type="button"
+            className="share-back-btn"
+            onClick={() => setView('select')}
+          >
+            ← 다른 날짜
+          </button>
+        </div>
 
         <div className="share-list" aria-label={`${activeDay?.label || 'Day'} 장소 목록`}>
           <div className="share-list-header">

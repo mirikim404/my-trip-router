@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { resolveApiUrl } from '../api/config';
 
 const MapViewer = ({ places, routeData, fitToPlaces = false }) => {
@@ -8,6 +8,14 @@ const MapViewer = ({ places, routeData, fitToPlaces = false }) => {
   const markers = useRef([]);
   const infoWindow = useRef(null);
   const selectedMarker = useRef(null);
+  // 지도 인스턴스가 막 생성된 직후엔 내부 좌표 투영이 아직 자리를 잡지
+  // 않은 상태라, 그 타이밍에 바로 마커/경로를 그리면 좌표가 어긋나 화면에
+  // 나타나지 않을 수 있다. 메인 화면은 지도가 미리 떠 있는 상태로 오래
+  // 유지되다가 나중에 경로가 채워지니 우연히 안전했지만, 공유 페이지는
+  // fetch가 끝난 뒤 지도 생성과 경로 표시가 같은 렌더 사이클에 몰려 있어서
+  // 이 타이밍 문제가 그대로 드러난다. 한 프레임을 기다린 뒤에야 그리기
+  // 시작하도록 별도 플래그로 명시적으로 막는다.
+  const [isMapReady, setIsMapReady] = useState(false);
 
   const escapeHtml = (value) => String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -31,6 +39,11 @@ const MapViewer = ({ places, routeData, fitToPlaces = false }) => {
       window.naver.maps.Event.addListener(mapInstance.current, 'click', () => {
         selectedMarker.current = null;
         infoWindow.current?.close();
+      });
+
+      requestAnimationFrame(() => {
+        window.naver.maps.Event.trigger(mapInstance.current, 'resize');
+        setIsMapReady(true);
       });
     }
   }, []);
@@ -62,7 +75,7 @@ const MapViewer = ({ places, routeData, fitToPlaces = false }) => {
   }, []);
 
   useEffect(() => {
-    if (!mapInstance.current || !window.naver) return;
+    if (!mapInstance.current || !window.naver || !isMapReady) return;
 
     polylineInstances.current.forEach(polyline => polyline.setMap(null));
     polylineInstances.current = [];
@@ -114,8 +127,8 @@ const MapViewer = ({ places, routeData, fitToPlaces = false }) => {
           map: mapInstance.current,
           title: place.title,
           icon: {
-            content: `<div style="display:flex;align-items:center;justify-content:center;width:30px;height:30px;border:3px solid #fff;border-radius:50%;background:${markerColor};box-shadow:0 2px 6px rgba(15,23,42,.35);color:#fff;font:700 13px/1 sans-serif;">${index + 1}</div>`,
-            anchor: new window.naver.maps.Point(15, 15),
+            content: `<div style="display:flex;align-items:center;justify-content:center;width:22px;height:22px;border:2px solid #fff;border-radius:50%;background:${markerColor};box-shadow:0 1px 4px rgba(15,23,42,.35);color:#fff;font:700 11px/1 sans-serif;">${index + 1}</div>`,
+            anchor: new window.naver.maps.Point(11, 11),
           },
         });
 
@@ -180,7 +193,7 @@ const MapViewer = ({ places, routeData, fitToPlaces = false }) => {
         polylineInstances.current.push(polyline);
       });
     }
-  }, [places, routeData, fitToPlaces]);
+  }, [places, routeData, fitToPlaces, isMapReady]);
 
   return <div ref={mapElement} style={{ width: '100%', height: '100%' }} />;
 };

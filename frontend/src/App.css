@@ -492,19 +492,27 @@ button:disabled {
   display: none;
 }
 
-.share-hero {
-  padding: 22px 18px 16px;
-  border-bottom: 1px solid #edf1f6;
+/* 공유 화면 진입 페이지: 트래블러 이름/날짜 + day 선택. 지도 페이지에
+   들어가면 이 정보는 다시 보여주지 않는다. */
+.share-entry {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 32px 20px calc(32px + env(safe-area-inset-bottom, 0px));
+  background: #f7f8fb;
+  color: #172033;
 }
 
-.share-hero p {
+.share-entry-hero p {
   margin: 0 0 8px;
   color: #2563eb;
   font-size: 12px;
   font-weight: 800;
 }
 
-.share-hero h1 {
+.share-entry-hero h1 {
   margin: 0;
   color: #111827;
   font-size: 28px;
@@ -512,46 +520,59 @@ button:disabled {
   letter-spacing: 0;
 }
 
-.share-hero span {
+.share-entry-hero span {
   display: block;
   margin-top: 8px;
   color: #64748b;
   font-size: 13px;
 }
 
-.share-day-tabs {
-  display: flex;
-  gap: 8px;
-  padding: 12px 18px;
-  overflow-x: auto;
-  border-bottom: 1px solid #edf1f6;
+.share-entry-days {
+  display: grid;
+  gap: 10px;
 }
 
-.share-day-tabs button {
-  flex: 0 0 auto;
-  min-width: 88px;
-  padding: 10px 12px;
+.share-entry-day {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 16px;
   border: 1px solid #dfe5ef;
+  border-radius: 12px;
   background: #fff;
-  color: #334155;
+  color: #172033;
   text-align: left;
 }
 
-.share-day-tabs button.active {
-  border-color: #2563eb;
-  background: #e9f2ff;
-  color: #1d4ed8;
+.share-entry-day strong {
+  font-size: 16px;
 }
 
-.share-day-tabs strong,
-.share-day-tabs span {
-  display: block;
+.share-entry-day span {
+  color: #64748b;
+  font-size: 13px;
 }
 
-.share-day-tabs span {
-  margin-top: 3px;
-  font-size: 12px;
-  font-weight: 500;
+.share-entry-day em {
+  margin-left: auto;
+  color: #2563eb;
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+/* 지도 페이지 상단: 헤더 대신 진입 페이지로 돌아가는 버튼 한 줄만 둔다. */
+.share-sheet-topbar {
+  padding: 14px 18px 0;
+}
+
+.share-back-btn {
+  padding: 6px 4px;
+  border: 0;
+  background: none;
+  color: #2563eb;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .share-list {
@@ -787,15 +808,8 @@ button:disabled {
     display: flex;
   }
 
-  .share-sheet .share-hero {
-    padding: 0 0 14px;
-    border-bottom: 0;
-  }
-
-  .share-sheet .share-day-tabs {
-    padding: 0 0 12px;
-    margin: 0 0 12px;
-    border-bottom: 1px solid #edf1f6;
+  .share-sheet .share-sheet-topbar {
+    padding: 0 0 10px;
   }
 
   .share-sheet .share-list {
