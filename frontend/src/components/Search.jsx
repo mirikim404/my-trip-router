@@ -2,10 +2,10 @@ import { useState } from 'react';
 import axios from 'axios';
 import { API_BASE_URL } from '../api/config';
 
-const Search = ({ days, onAddPlace }) => {
+const Search = ({ days, initialDay, onAddPlace }) => {
   const [keyword, setKeyword] = useState('');
   const [results, setResults] = useState([]);
-  const [selectedDay, setSelectedDay] = useState(days[0]?.key || '');
+  const [selectedDay, setSelectedDay] = useState(initialDay || days[0]?.key || '');
   const selectedDayKey = days.some((day) => day.key === selectedDay) ? selectedDay : days[0]?.key || '';
   const selectedDayLabel = days.find((day) => day.key === selectedDayKey);
 

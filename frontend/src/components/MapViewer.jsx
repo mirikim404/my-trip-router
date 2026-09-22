@@ -144,9 +144,13 @@ const MapViewer = ({ places, routeData, fitToPlaces = false }) => {
         markers.current.push(marker);
       });
 
-      if (fitToPlaces && places.length > 1) {
-        const lats = places.map((place) => place.lat);
-        const lngs = places.map((place) => place.lng);
+      const routePoints = routeData?.provider === 'google-transit'
+        ? routeData.legs.flatMap(leg => leg.paths || []).flat()
+        : [];
+
+      if (fitToPlaces && (places.length > 1 || routePoints.length > 0)) {
+        const lats = [...places.map((place) => place.lat), ...routePoints.map((point) => point.lat)];
+        const lngs = [...places.map((place) => place.lng), ...routePoints.map((point) => point.lng)];
         const bounds = new window.naver.maps.LatLngBounds(
           new window.naver.maps.LatLng(Math.min(...lats), Math.min(...lngs)),
           new window.naver.maps.LatLng(Math.max(...lats), Math.max(...lngs)),
@@ -159,6 +163,12 @@ const MapViewer = ({ places, routeData, fitToPlaces = false }) => {
     }
 
     if (routeData?.provider === 'google-transit') {
+      // 지도가 처음 생성된 직후처럼 컨테이너가 아직 최종 크기를 반영하지
+      // 못한 상태에서 Polyline을 그리면, 마커는 보여도 선의 좌표 투영이
+      // 어긋나 화면에 나타나지 않는 경우가 있다. 그려주기 직전에 한 번
+      // 리사이즈를 강제로 알려서 최신 컨테이너 크기로 다시 계산하게 한다.
+      window.naver.maps.Event.trigger(mapInstance.current, 'resize');
+
       routeData.legs.flatMap(leg => leg.paths || []).forEach(path => {
         const polyline = new window.naver.maps.Polyline({
           path: path.map(point => new window.naver.maps.LatLng(point.lat, point.lng)),

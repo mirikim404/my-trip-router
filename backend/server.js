@@ -31,8 +31,41 @@ const createPlanId = () => crypto.randomBytes(5).toString('base64url');
 const MAX_DAYS = 31;
 const MAX_PLACES_PER_DAY = 50;
 
+const isFinitePlace = (place) => (
+  place && typeof place === 'object'
+  && typeof place.title === 'string'
+  && Number.isFinite(place.lat) && Number.isFinite(place.lng)
+);
+
+// Google Directions 결과를 그대로 신뢰하지 않고, 지도에 그리는 데 필요한
+// 형태(좌표 배열로 이루어진 legs.paths)로 좁혀서 저장한다.
+const sanitizeRouteData = (routeData) => {
+  if (!routeData || typeof routeData !== 'object') return null;
+  if (routeData.provider !== 'google-transit') return null;
+  if (!Array.isArray(routeData.places) || !routeData.places.every(isFinitePlace)) return null;
+  if (!Array.isArray(routeData.legs)) return null;
+
+  const legs = routeData.legs.map((leg) => {
+    if (!leg || typeof leg !== 'object' || !Array.isArray(leg.paths)) return null;
+    const paths = leg.paths.map((path) => {
+      if (!Array.isArray(path)) return null;
+      const points = path.map((point) => (
+        point && Number.isFinite(point.lat) && Number.isFinite(point.lng)
+          ? { lat: point.lat, lng: point.lng }
+          : null
+      ));
+      return points.every(Boolean) ? points : null;
+    });
+    return paths.every(Boolean) ? { paths } : null;
+  });
+
+  if (!legs.every(Boolean)) return null;
+
+  return { provider: 'google-transit', places: routeData.places, legs };
+};
+
 // 공유 저장 요청 검증 + 필요한 필드만 남기기
-const sanitizePlan = ({ profile, itinerary } = {}) => {
+const sanitizePlan = ({ profile, itinerary, routesByDay } = {}) => {
   if (typeof profile?.travelerName !== 'string' || !profile.travelerName.trim()) return null;
   if (!Array.isArray(profile.days) || profile.days.length === 0 || profile.days.length > MAX_DAYS) return null;
   if (!itinerary || typeof itinerary !== 'object' || Array.isArray(itinerary)) return null;
@@ -41,15 +74,21 @@ const sanitizePlan = ({ profile, itinerary } = {}) => {
   if (days.some((day) => typeof day.key !== 'string' || !day.key)) return null;
 
   const cleanItinerary = {};
+  const cleanRoutesByDay = {};
+  const safeRoutesByDay = routesByDay && typeof routesByDay === 'object' && !Array.isArray(routesByDay)
+    ? routesByDay
+    : {};
+
   for (const day of days) {
     const places = itinerary[day.key] ?? [];
     const isValid = Array.isArray(places)
       && places.length <= MAX_PLACES_PER_DAY
-      && places.every((place) => (
-        typeof place?.title === 'string' && Number.isFinite(place.lat) && Number.isFinite(place.lng)
-      ));
+      && places.every(isFinitePlace);
     if (!isValid) return null;
     cleanItinerary[day.key] = places;
+
+    const cleanRoute = sanitizeRouteData(safeRoutesByDay[day.key]);
+    if (cleanRoute) cleanRoutesByDay[day.key] = cleanRoute;
   }
 
   return {
@@ -60,6 +99,7 @@ const sanitizePlan = ({ profile, itinerary } = {}) => {
       days,
     },
     itinerary: cleanItinerary,
+    routesByDay: cleanRoutesByDay,
   };
 };
 

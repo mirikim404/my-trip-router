@@ -297,9 +297,39 @@ button:disabled {
   font-size: 12px;
 }
 
-.day-list {
-  display: grid;
-  gap: 14px;
+.day-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+  overflow-x: auto;
+}
+
+.day-tabs button {
+  flex: 0 0 auto;
+  min-width: 88px;
+  padding: 10px 12px;
+  border: 1px solid #dfe5ef;
+  border-radius: 8px;
+  background: #fff;
+  color: #334155;
+  text-align: left;
+}
+
+.day-tabs button.active {
+  border-color: #2563eb;
+  background: #e9f2ff;
+  color: #1d4ed8;
+}
+
+.day-tabs strong,
+.day-tabs span {
+  display: block;
+}
+
+.day-tabs span {
+  margin-top: 3px;
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .day-panel {
@@ -309,24 +339,12 @@ button:disabled {
   background: #fff;
 }
 
-.day-panel header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
+.sidebar-tools-desktop {
+  display: contents;
 }
 
-.day-panel h3 {
-  margin: 0;
-  color: #2563eb;
-  font-size: 15px;
-  line-height: 1.2;
-}
-
-.day-panel header span {
-  color: #64748b;
-  font-size: 12px;
+.tools-fab {
+  display: none;
 }
 
 .empty-state {
@@ -387,6 +405,52 @@ button:disabled {
 .optimize-button {
   width: 100%;
   padding: 10px;
+}
+
+/* 모바일 전용 검색/공유 오버레이. 데스크톱에서는 절대 열리지 않지만
+   (tools-fab이 숨겨져 있어 열 방법이 없음) 만약을 대비해 여기서도
+   기본값을 정의해둔다. */
+.tools-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.45);
+  z-index: 30;
+}
+
+.tools-sheet {
+  width: 100%;
+  max-height: 86vh;
+  padding: 16px 18px calc(18px + env(safe-area-inset-bottom, 0px));
+  overflow-y: auto;
+  background: #fff;
+  border-radius: 18px 18px 0 0;
+  box-sizing: border-box;
+}
+
+.tools-sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.tools-sheet-header h3 {
+  margin: 0;
+  color: #111827;
+  font-size: 16px;
+}
+
+.tools-close {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #334155;
+  font-size: 14px;
 }
 
 .share-shell {
@@ -645,6 +709,26 @@ button:disabled {
 
   .sidebar.dragging .sheet-handle {
     cursor: grabbing;
+  }
+
+  /* 모바일: 시트에는 Day 탭과 그 날의 장소 목록만 보이게 하고,
+     검색/공유는 플로팅 버튼으로 열리는 오버레이로 뺀다. */
+  .sidebar-tools-desktop {
+    display: none;
+  }
+
+  .tools-fab {
+    display: block;
+    position: sticky;
+    bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+    left: 0;
+    width: 100%;
+    margin-top: 12px;
+    padding: 13px;
+    background: #172033;
+    color: #fff;
+    border-radius: 999px;
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.25);
   }
 
   .share-shell {

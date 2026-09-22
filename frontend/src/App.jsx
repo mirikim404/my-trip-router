@@ -8,6 +8,7 @@ import { PUBLIC_BASE_URL, resolveApiUrl } from './api/config';
 
 const PROFILE_STORAGE_KEY = 'myTripProfile';
 const PLAN_STORAGE_KEY = 'myTripPlan';
+const ROUTES_STORAGE_KEY = 'myTripRoutes';
 
 const parseDate = (value) => {
   const [year, month, day] = value.split('-').map(Number);
@@ -190,11 +191,16 @@ function SharePlanPage({ shareId }) {
     );
   }
 
-  const { profile, itinerary } = plan;
+  const { profile, itinerary, routesByDay = {} } = plan;
   const days = profile.days || [];
   const activeDay = days.find((day) => day.key === selectedDay) || days[0];
   const places = activeDay ? itinerary[activeDay.key] || [] : [];
   const totalPlaces = days.reduce((total, day) => total + (itinerary[day.key]?.length || 0), 0);
+  const activeDayRoute = activeDay ? routesByDay[activeDay.key] : null;
+  // 경로가 만들어져 있으면 정렬된 순서(출발→도착)로 지도를 그리고, 없으면
+  // 저장된 목록 그대로 마커만 보여준다.
+  const mapPlaces = activeDayRoute?.places || places;
+  const mapRouteData = activeDayRoute?.routeData || null;
 
   return (
     <main className="share-shell">
@@ -244,7 +250,7 @@ function SharePlanPage({ shareId }) {
       </section>
 
       <section className="share-map" aria-label="지도">
-        <MapViewer places={places} routeData={null} fitToPlaces />
+        <MapViewer places={mapPlaces} routeData={mapRouteData} fitToPlaces />
       </section>
     </main>
   );
@@ -260,8 +266,11 @@ function App() {
       ? createEmptyItinerary(initialProfile.days, savedPlan || {})
       : savedPlan || {};
   });
-  const [currentPlaces, setCurrentPlaces] = useState([]);
-  const [currentRoute, setCurrentRoute] = useState(null);
+  // Day별로 만들어진 경로를 각각 기억해서, 다른 Day로 넘어갔다 와도
+  // (또는 공유할 때) 이전에 만든 경로가 사라지지 않게 한다.
+  // 모양: { [dayKey]: { places: [...], routeData: {...} } }
+  const [routesByDay, setRoutesByDay] = useState(() => loadJson(ROUTES_STORAGE_KEY) || {});
+  const [activeDay, setActiveDay] = useState(() => initialProfile?.days?.[0]?.key || '');
   const [shareStatus, setShareStatus] = useState({ isSaving: false, url: '', copied: false });
 
   useEffect(() => {
@@ -280,14 +289,29 @@ function App() {
     }
   }, [itinerary, shareId]);
 
+  useEffect(() => {
+    if (!shareId) {
+      localStorage.setItem(ROUTES_STORAGE_KEY, JSON.stringify(routesByDay));
+    }
+  }, [routesByDay, shareId]);
+
+  const clearDayRoute = (day) => {
+    setRoutesByDay((previous) => {
+      if (!previous[day]) return previous;
+      const next = { ...previous };
+      delete next[day];
+      return next;
+    });
+  };
+
   const handleCreateTrip = ({ travelerName, startDate, endDate }) => {
     const days = buildTripDays(startDate, endDate);
     const nextProfile = { travelerName, startDate, endDate, days };
 
     setProfile(nextProfile);
     setItinerary((previous) => createEmptyItinerary(days, previous));
-    setCurrentPlaces([]);
-    setCurrentRoute(null);
+    setActiveDay(days[0]?.key || '');
+    setRoutesByDay({});
     setShareStatus({ isSaving: false, url: '', copied: false });
   };
 
@@ -296,8 +320,6 @@ function App() {
     if (!shouldReset) return;
 
     setProfile(null);
-    setCurrentPlaces([]);
-    setCurrentRoute(null);
     setShareStatus({ isSaving: false, url: '', copied: false });
   };
 
@@ -307,7 +329,7 @@ function App() {
     setShareStatus((previous) => ({ ...previous, isSaving: true, copied: false }));
 
     try {
-      const { id } = await saveSharedPlan({ profile, itinerary });
+      const { id } = await saveSharedPlan({ profile, itinerary, routesByDay });
       const url = `${PUBLIC_BASE_URL || window.location.origin}/share/${id}`;
 
       let copied = false;
@@ -331,6 +353,7 @@ function App() {
       ...previous,
       [day]: [...(previous[day] || []), placeData],
     }));
+    clearDayRoute(day);
     setShareStatus((previous) => ({ ...previous, url: '', copied: false }));
   };
 
@@ -339,6 +362,7 @@ function App() {
       ...previous,
       [day]: (previous[day] || []).filter((_, index) => index !== indexToRemove),
     }));
+    clearDayRoute(day);
     setShareStatus((previous) => ({ ...previous, url: '', copied: false }));
   };
 
@@ -351,8 +375,7 @@ function App() {
       places.splice(toIndex, 0, movedPlace);
       return { ...previous, [day]: places };
     });
-    setCurrentPlaces([]);
-    setCurrentRoute(null);
+    clearDayRoute(day);
     setShareStatus((previous) => ({ ...previous, url: '', copied: false }));
   };
 
@@ -372,8 +395,10 @@ function App() {
     try {
       const routeData = await fetchTransitDirections(places);
       const optimizedPlaces = routeData.places || places;
-      setCurrentPlaces(optimizedPlaces);
-      setCurrentRoute(routeData);
+      setRoutesByDay((previous) => ({
+        ...previous,
+        [day]: { places: optimizedPlaces, routeData },
+      }));
     } catch (error) {
       console.error('경로 탐색 중 오류가 발생했습니다:', error);
       const details = error.response?.data?.details;
@@ -392,12 +417,21 @@ function App() {
     return <SignupScreen onCreateTrip={handleCreateTrip} />;
   }
 
+  const activeDayKey = profile.days.some((day) => day.key === activeDay)
+    ? activeDay
+    : profile.days[0]?.key || '';
+  const activeDayRoute = routesByDay[activeDayKey];
+  const mapPlaces = activeDayRoute?.places || [];
+  const mapRouteData = activeDayRoute?.routeData || null;
+
   return (
     <div className="app-shell">
       <Sidebar
         profile={profile}
         days={profile.days}
         itinerary={itinerary}
+        activeDay={activeDayKey}
+        onSelectDay={setActiveDay}
         onAddPlace={handleAddPlace}
         onDeletePlace={handleDeletePlace}
         onReorder={handleReorderPlaces}
@@ -408,7 +442,7 @@ function App() {
       />
 
       <div className="map-pane">
-        <MapViewer places={currentPlaces} routeData={currentRoute} />
+        <MapViewer places={mapPlaces} routeData={mapRouteData} />
       </div>
     </div>
   );
