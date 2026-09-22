@@ -468,13 +468,28 @@ button:disabled {
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
-.share-content {
+/* 데스크톱: 지도는 오른쪽 칸(share-map-pane)을 채우고, 왼쪽은 시트(원래는
+   바텀시트지만 데스크톱에서는 그냥 고정 패널) 형태로 목록을 보여준다. */
+.share-map-pane {
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.share-sheet {
+  grid-column: 1;
+  grid-row: 1;
   display: flex;
   min-height: 0;
   flex-direction: column;
   overflow-y: auto;
   border-right: 1px solid #dfe5ef;
   background: #fff;
+}
+
+.share-sheet .sheet-handle {
+  display: none;
 }
 
 .share-hero {
@@ -541,6 +556,9 @@ button:disabled {
 
 .share-list {
   padding: 18px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .share-list-header {
@@ -619,11 +637,6 @@ button:disabled {
   color: #2563eb;
   font-size: 12px;
   font-style: normal;
-}
-
-.share-map {
-  min-width: 0;
-  min-height: 0;
 }
 
 .share-state {
@@ -735,17 +748,58 @@ button:disabled {
   }
 
   .share-shell {
-    grid-template-columns: 1fr;
-    grid-template-rows: minmax(0, 1fr) minmax(240px, 42%);
+    display: block;
+    position: relative;
   }
 
-  .share-content {
+  .share-map-pane {
+    position: absolute;
+    inset: 0;
+    height: 100%;
+  }
+
+  /* 공유 화면도 메인 화면과 동일한 네이버 지도 스타일 바텀시트를 쓴다:
+     지도가 기본으로 화면을 채우고, 시트를 드래그하거나 탭해서
+     peek → half → full로 오갈 수 있다. */
+  .share-sheet {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: var(--sheet-height, 16vh);
+    max-height: 92vh;
+    min-height: 120px;
+    padding: 0 18px calc(14px + env(safe-area-inset-bottom, 0px));
     border-right: 0;
-    border-bottom: 1px solid #dfe5ef;
+    border-top: 1px solid #dfe5ef;
+    border-radius: 18px 18px 0 0;
+    box-shadow: 0 -12px 30px rgba(15, 23, 42, 0.16);
+    z-index: 20;
+    transition: height 0.28s cubic-bezier(0.32, 0.72, 0, 1);
   }
 
-  .share-map {
-    min-height: 260px;
+  .share-sheet.dragging {
+    transition: none;
+  }
+
+  .share-sheet .sheet-handle {
+    display: flex;
+  }
+
+  .share-sheet .share-hero {
+    padding: 0 0 14px;
+    border-bottom: 0;
+  }
+
+  .share-sheet .share-day-tabs {
+    padding: 0 0 12px;
+    margin: 0 0 12px;
+    border-bottom: 1px solid #edf1f6;
+  }
+
+  .share-sheet .share-list {
+    padding: 0;
   }
 }
 

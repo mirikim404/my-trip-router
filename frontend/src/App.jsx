@@ -5,6 +5,7 @@ import MapViewer from './components/MapViewer';
 import { fetchTransitDirections } from './api/naverApi';
 import { fetchSharedPlan, saveSharedPlan } from './api/shareApi';
 import { PUBLIC_BASE_URL, resolveApiUrl } from './api/config';
+import { useBottomSheet, BOTTOM_SHEET_PEEK_RATIO } from './utils/useBottomSheet';
 
 const PROFILE_STORAGE_KEY = 'myTripProfile';
 const PLAN_STORAGE_KEY = 'myTripPlan';
@@ -157,6 +158,15 @@ function SharePlanPage({ shareId }) {
   const [selectedDay, setSelectedDay] = useState('');
   const [status, setStatus] = useState('loading');
 
+  const {
+    sheetHeight,
+    isSheetDragging,
+    cycleSheetHeight,
+    handleSheetPointerDown,
+    handleSheetPointerMove,
+    handleSheetPointerUp,
+  } = useBottomSheet({ initialHeightRatio: BOTTOM_SHEET_PEEK_RATIO });
+
   useEffect(() => {
     const loadPlan = async () => {
       try {
@@ -204,7 +214,32 @@ function SharePlanPage({ shareId }) {
 
   return (
     <main className="share-shell">
-      <section className="share-content">
+      <div className="share-map-pane">
+        <MapViewer places={mapPlaces} routeData={mapRouteData} fitToPlaces />
+      </div>
+
+      <section
+        className={`share-sheet${isSheetDragging ? ' dragging' : ''}`}
+        style={{ '--sheet-height': `${sheetHeight}px` }}
+        aria-label="여행 일정"
+      >
+        <div
+          className="sheet-handle"
+          role="button"
+          tabIndex={0}
+          aria-label="목록 크기 조절 (드래그하거나 탭하세요)"
+          onPointerDown={handleSheetPointerDown}
+          onPointerMove={handleSheetPointerMove}
+          onPointerUp={handleSheetPointerUp}
+          onPointerCancel={handleSheetPointerUp}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              cycleSheetHeight();
+            }
+          }}
+        />
+
         <header className="share-hero">
           <p>공유된 여행 일정</p>
           <h1>{profile.travelerName}의 여행</h1>
@@ -224,7 +259,7 @@ function SharePlanPage({ shareId }) {
           ))}
         </nav>
 
-        <section className="share-list" aria-label={`${activeDay?.label || 'Day'} 장소 목록`}>
+        <div className="share-list" aria-label={`${activeDay?.label || 'Day'} 장소 목록`}>
           <div className="share-list-header">
             <h2>{activeDay?.label}</h2>
             <span>{places.length}곳</span>
@@ -246,11 +281,7 @@ function SharePlanPage({ shareId }) {
               ))}
             </ol>
           )}
-        </section>
-      </section>
-
-      <section className="share-map" aria-label="지도">
-        <MapViewer places={mapPlaces} routeData={mapRouteData} fitToPlaces />
+        </div>
       </section>
     </main>
   );
