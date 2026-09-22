@@ -4,36 +4,27 @@ const axios = require('axios');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
+const mongoose = require('mongoose'); // Mongoose 추가
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '1mb' }));
 
-const DATA_DIR = path.join(__dirname, 'data');
-const PLANS_FILE = path.join(DATA_DIR, 'plans.json');
+// --- MongoDB 연결 및 스키마 설정 시작 ---
+mongoose.connect(process.env.MONGODB_URI)
+  .then(() => console.log('MongoDB 연결 성공!'))
+  .catch((err) => console.error('MongoDB 연결 실패:', err));
 
-const ensurePlanStore = () => {
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-  if (!fs.existsSync(PLANS_FILE)) fs.writeFileSync(PLANS_FILE, '{}', 'utf8');
-};
+const planSchema = new mongoose.Schema({
+  shareId: { type: String, required: true, unique: true },
+  planData: { type: mongoose.Schema.Types.Mixed, required: true },
+  createdAt: { type: Date, default: Date.now }
+});
 
-const readPlans = () => {
-  ensurePlanStore();
-  try {
-    return JSON.parse(fs.readFileSync(PLANS_FILE, 'utf8'));
-  } catch (error) {
-    console.error('Plan store read error:', error);
-    return {};
-  }
-};
+const Plan = mongoose.model('Plan', planSchema);
+// --- MongoDB 연결 및 스키마 설정 끝 ---
 
-const writePlans = (plans) => {
-  ensurePlanStore();
-  const tempFile = `${PLANS_FILE}.tmp`;
-  fs.writeFileSync(tempFile, JSON.stringify(plans, null, 2), 'utf8');
-  fs.renameSync(tempFile, PLANS_FILE);
-};
 
 const createPlanId = () => crypto.randomBytes(5).toString('base64url');
 
@@ -112,8 +103,8 @@ const decodePolyline = (encoded) => {
   return points;
 };
 
-// 일정 공유: 저장(POST) / 조회(GET)
-app.post('/api/plans', (req, res) => {
+// [수정됨] 일정 공유: 저장(POST)
+app.post('/api/plans', async (req, res) => {
   try {
     const cleanPlan = sanitizePlan(req.body);
 
@@ -121,33 +112,49 @@ app.post('/api/plans', (req, res) => {
       return res.status(400).json({ error: 'Invalid plan payload.' });
     }
 
-    const plans = readPlans();
+    // 중복되지 않는 고유 ID 생성
     let id = createPlanId();
-    while (Object.hasOwn(plans, id)) id = createPlanId();
+    let isUnique = false;
+    while (!isUnique) {
+      const existing = await Plan.findOne({ shareId: id });
+      if (existing) {
+        id = createPlanId();
+      } else {
+        isUnique = true;
+      }
+    }
 
     const now = new Date().toISOString();
-    plans[id] = {
+    const finalPlanData = {
       id,
       ...cleanPlan,
       createdAt: now,
       updatedAt: now,
     };
-    writePlans(plans);
 
-    res.status(201).json({ id, plan: plans[id] });
+    // DB에 저장
+    const newPlan = new Plan({
+      shareId: id,
+      planData: finalPlanData
+    });
+    await newPlan.save();
+
+    res.status(201).json({ id, plan: finalPlanData });
   } catch (error) {
     console.error('Plan save error:', error);
     res.status(500).json({ error: 'Plan Save Error' });
   }
 });
 
-app.get('/api/plans/:id', (req, res) => {
+// [수정됨] 일정 공유: 조회(GET)
+app.get('/api/plans/:id', async (req, res) => {
   try {
-    const plans = readPlans();
-    const plan = Object.hasOwn(plans, req.params.id) ? plans[req.params.id] : null;
+    const planDoc = await Plan.findOne({ shareId: req.params.id });
 
-    if (!plan) return res.status(404).json({ error: 'Plan not found.' });
-    res.json(plan);
+    if (!planDoc) return res.status(404).json({ error: 'Plan not found.' });
+    
+    // DB에서 찾은 실제 일정 데이터 반환
+    res.json(planDoc.planData);
   } catch (error) {
     console.error('Plan read error:', error);
     res.status(500).json({ error: 'Plan Read Error' });
@@ -325,8 +332,6 @@ app.post('/api/transit', async (req, res) => {
     res.status(status).json({ error: 'Transit API Error', details });
   }
 });
-
-
 
 // 배포용: 빌드된 프론트(frontend/dist)를 같은 서버에서 서빙해요. (npm run build 후)
 // /share/:id 같은 프론트 라우트는 index.html로 넘겨요. (Express 5는 '*' 패턴이 바뀌어서 미들웨어로 처리)
