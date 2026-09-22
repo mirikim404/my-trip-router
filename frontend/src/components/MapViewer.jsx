@@ -35,6 +35,32 @@ const MapViewer = ({ places, routeData, fitToPlaces = false }) => {
     }
   }, []);
 
+  // Keep the map's internal size in sync with its container.
+  // On mobile the map-pane's actual pixel size can change after the map is
+  // first created (address bar show/hide, bottom sheet drag, orientation
+  // change). Without telling Naver Maps to resize, it keeps using its old
+  // size internally — markers still look roughly right, but routes drawn
+  // with Polyline are positioned against the stale projection and don't
+  // show up at all.
+  useEffect(() => {
+    const container = mapElement.current;
+    if (!container || !window.naver?.maps) return undefined;
+
+    const triggerResize = () => {
+      if (!mapInstance.current) return;
+      window.naver.maps.Event.trigger(mapInstance.current, 'resize');
+    };
+
+    const raf = requestAnimationFrame(triggerResize);
+    const observer = new ResizeObserver(triggerResize);
+    observer.observe(container);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      observer.disconnect();
+    };
+  }, []);
+
   useEffect(() => {
     if (!mapInstance.current || !window.naver) return;
 
