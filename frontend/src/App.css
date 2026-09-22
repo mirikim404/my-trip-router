@@ -2,6 +2,7 @@
   display: flex;
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
   background: #f7f8fb;
   color: #172033;
@@ -20,6 +21,7 @@
 
 .signup-screen {
   min-height: 100vh;
+  min-height: 100dvh;
   display: grid;
   place-items: center;
   padding: 32px;
@@ -132,6 +134,7 @@ button:disabled {
 .sidebar {
   width: 380px;
   height: 100vh;
+  height: 100dvh;
   padding: 18px;
   border-right: 1px solid #dfe5ef;
   overflow-y: auto;
