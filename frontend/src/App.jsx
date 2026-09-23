@@ -326,16 +326,22 @@ function SharePlanPage({ shareId }) {
                             {place.photoUrl && (
                               <img src={resolveApiUrl(place.photoUrl)} alt="" loading="lazy" />
                             )}
-                            <div className="share-place-info">
+                            <div className={`share-place-info ${slot.options.length > 1 ? 'has-badge' : ''}`}>
                               <strong>
-                                {index + 1}. {slot.options.length > 1 && <span className="option-badge">{String.fromCharCode(65 + optIdx)}안</span>}
-                                {place.title}
+                                {index + 1}. {place.title}
                               </strong>
                               <span>{place.roadAddress || place.address || '주소 정보 없음'}</span>
                               {(place.primaryType || place.placeType) && (
                                 <em>{place.primaryType || place.placeType}</em>
                               )}
                             </div>
+                            
+                            {/* 카드 우측 상단에 뱃지 표시 */}
+                            {slot.options.length > 1 && (
+                              <span className="option-badge">
+                                {String.fromCharCode(65 + optIdx)}안
+                              </span>
+                            )}
                           </div>
                         </div>
                       ))}

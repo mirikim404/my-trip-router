@@ -703,6 +703,7 @@ button:disabled {
   border: 1px solid #e6ebf2;
   border-radius: 12px;
   background: #ffffff;
+  position: relative; /* 우측 상단 뱃지 고정을 위해 추가 */
 }
 
 .share-place-card img {
@@ -718,6 +719,11 @@ button:disabled {
 .share-place-info {
   flex: 1;
   min-width: 0; 
+}
+
+/* 뱃지가 있을 때 글자가 뱃지 아래로 들어가지 않도록 우측 여백 확보 */
+.share-place-info.has-badge {
+  padding-right: 36px;
 }
 
 .share-place-info strong,
@@ -747,9 +753,18 @@ button:disabled {
   font-style: normal;
 }
 
+/* 카드 우측 상단 A안, B안 뱃지 */
 .option-badge {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: #e9f2ff;
   color: #2563eb;
-  margin-right: 6px;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 8px;
+  border-radius: 999px;
+  line-height: 1;
 }
 
 /* 하단 페이지네이션 점 */
