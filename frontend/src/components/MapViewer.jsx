@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { resolveApiUrl } from '../api/config';
 
-const MapViewer = ({ places, fitToPlaces = false }) => {
+// 💡 focusedPlace prop 추가
+const MapViewer = ({ places, focusedPlace, fitToPlaces = false }) => {
   const mapElement = useRef(null);
   const mapInstance = useRef(null);
   const markers = useRef([]);
@@ -154,6 +155,19 @@ const MapViewer = ({ places, fitToPlaces = false }) => {
       }
     }
   }, [places, fitToPlaces, isMapReady]);
+
+  // 💡 추가된 부분: focusedPlace(클릭한 장소)가 변경될 때 지도를 해당 위치로 이동 및 줌인
+  useEffect(() => {
+    if (!mapInstance.current || !window.naver || !isMapReady || !focusedPlace) return;
+
+    const latLng = new window.naver.maps.LatLng(focusedPlace.lat, focusedPlace.lng);
+    
+    // 부드럽게 위치 이동 (panTo)
+    mapInstance.current.panTo(latLng);
+    
+    // 포커스 된 장소를 자세히 볼 수 있도록 약간 줌인 (기호에 맞게 숫자 조절 가능)
+    mapInstance.current.setZoom(15, true); 
+  }, [focusedPlace, isMapReady]);
 
   return <div ref={mapElement} style={{ width: '100%', height: '100%' }} />;
 };

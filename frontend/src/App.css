@@ -603,14 +603,18 @@ button:disabled {
 }
 
 .share-sheet {
-  grid-column: 1;
-  grid-row: 1;
   display: flex;
-  min-height: 0;
   flex-direction: column;
-  overflow-y: auto;
-  border-right: 1px solid #dfe5ef;
-  background: #fff;
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: var(--sheet-height, 50vh);
+  background: #fff !important;
+  z-index: 100 !important;
+  border-radius: 20px 20px 0 0;
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.08);
+  transition: height 0.1s ease-out;
 }
 
 .share-sheet .sheet-handle {

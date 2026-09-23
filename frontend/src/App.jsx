@@ -407,11 +407,15 @@ function SharePlanPage({ shareId }) {
   const activeDay = days.find((day) => day.key === selectedDay) || days[0];
   const allSlots = activeDay ? itinerary[activeDay.key] || [] : [];
   
-  // 방문 안 한 장소 vs 방문 완료한 장소 분리 (방문 완료 시 아래로 이동)
+  // 방문 안 한 장소 vs 방문 완료한 장소 분리
   const unvisitedSlots = allSlots.filter((slot) => !visitedSlots[slot.id]);
   const visitedSlotsList = allSlots.filter((slot) => visitedSlots[slot.id]);
 
-  const mapPlaces = unvisitedSlots.map((slot) => {
+  // 💡 [수정됨] 마커 번호 동기화를 위해 방문 안 한 곳 -> 방문 한 곳 순서로 재배열
+  const reorderedSlots = [...unvisitedSlots, ...visitedSlotsList];
+
+  // 지도에 표시할 최종 리스트
+  const mapPlaces = reorderedSlots.map((slot) => {
     const idx = slotSelections[slot.id] ?? slot.selectedIndex ?? 0;
     return slot.options[idx] || slot.options[0];
   });
@@ -430,8 +434,12 @@ function SharePlanPage({ shareId }) {
   return (
     <main className="share-shell">
       <div className="share-map-pane">
-        {/* focusedPlace를 함께 넘겨 선택한 카드로 지도 중심 이동 */}
-        <MapViewer places={focusedPlace ? [focusedPlace, ...mapPlaces] : mapPlaces} fitToPlaces={!focusedPlace} />
+        {/* 💡 [수정됨] 배열에 focusedPlace를 중복 추가하지 않고 그대로 mapPlaces만 전달 (마커 번호 오류 해결) */}
+        <MapViewer 
+          places={mapPlaces} 
+          focusedPlace={focusedPlace} /* MapViewer 내부에서 줌인용으로만 사용하도록 별도 prop으로 전달 */
+          fitToPlaces={!focusedPlace} 
+        />
       </div>
 
       <section
