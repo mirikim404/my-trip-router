@@ -1385,8 +1385,3 @@ button:disabled {
   background: #f1f5f9;
   color: #475569;
 }
-
-.option-badge,
-.naver-map-link {
-  display: none !important;
-}
