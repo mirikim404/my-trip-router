@@ -418,10 +418,6 @@ function SharePlanPage({ shareId }) {
     return slot.options[idx] || slot.options[0];
   });
 
-  const displayPlaces = focusedPlace 
-  ? [...mapPlaces.filter(p => p !== focusedPlace), focusedPlace]
-  : mapPlaces;
-
   const handleToggleVisit = (slotId) => {
     setVisitedSlots((prev) => ({
       ...prev,
@@ -437,7 +433,7 @@ function SharePlanPage({ shareId }) {
     <main className="share-shell">
       <div className="share-map-pane">
         <MapViewer
-          places={displayPlaces}
+          places={mapPlaces}
           focusedPlace={focusedPlace}
           fitToPlaces={!focusedPlace}
           sheetHeight={sheetHeight}
