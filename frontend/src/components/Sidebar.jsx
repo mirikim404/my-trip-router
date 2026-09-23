@@ -20,7 +20,7 @@ const Sidebar = ({
   shareStatus,
 }) => {
   const [draggedItem, setDraggedItem] = useState(null);
-  const [dropTarget, setDropTarget] = useState(null); 
+  const [dropTarget, setDropTarget] = useState(null);
   const [isToolsOpen, setIsToolsOpen] = useState(false);
   const itemRefs = useRef(new Map());
   const previousPositions = useRef(new Map());
@@ -137,6 +137,7 @@ const Sidebar = ({
             {places.length === 0 ? (
               <p className="empty-state">아직 추가한 장소가 없어요.</p>
             ) : (
+
               <ul className="place-list">
                 {places.map((slot, index) => {
                   const slotKey = getSlotKey(slot);
@@ -173,71 +174,74 @@ const Sidebar = ({
                         setDropTarget(null);
                       }}
                     >
-                      <span
-                        className="place-drag-handle"
-                        draggable
-                        onDragStart={(event) => {
-                          const row = event.currentTarget.closest('li');
-                          if (row) event.dataTransfer.setDragImage(row, 16, 16);
-                          setDraggedItem({ day: day.key, index, id: slotKey });
-                        }}
-                        onDragEnd={() => {
-                          setDraggedItem(null);
-                          setDropTarget(null);
-                        }}
-                        role="button"
-                        tabIndex={-1}
-                        aria-label="드래그해서 순서 변경 또는 다른 항목에 겹쳐서 대안으로 합치기"
-                      >
-                        ⠿
-                      </span>
+                      {/* 하얀색 행 카드 영역 */}
+                      <div className="place-card">
+                        <span
+                          className="place-drag-handle"
+                          draggable
+                          onDragStart={(event) => {
+                            const row = event.currentTarget.closest('li');
+                            if (row) event.dataTransfer.setDragImage(row, 16, 16);
+                            setDraggedItem({ day: day.key, index, id: slotKey });
+                          }}
+                          onDragEnd={() => {
+                            setDraggedItem(null);
+                            setDropTarget(null);
+                          }}
+                          role="button"
+                          tabIndex={-1}
+                          aria-label="드래그해서 순서 변경 또는 다른 항목에 겹쳐서 대안으로 합치기"
+                        >
+                          ⠿
+                        </span>
 
-                      <div className="place-options">
-                        <div className="place-title-row">
-                          <span className="place-index">{index + 1}.</span>
-                          {isMultiOption && (
-                            <span className={`schedule-badge schedule-badge-${(slot.selectedIndex ?? 0) % 2 === 0 ? 'a' : 'b'}`}>
-                              {String.fromCharCode(65 + (slot.selectedIndex ?? 0))}
+                        <div className="place-options">
+                          <div className="place-title-row">
+                            <span className="place-index">{index + 1}.</span>
+                            {isMultiOption && (
+                              <span className={`schedule-badge schedule-badge-${(slot.selectedIndex ?? 0) % 2 === 0 ? 'a' : 'b'}`}>
+                                {String.fromCharCode(65 + (slot.selectedIndex ?? 0))}
+                              </span>
+                            )}
+                            <span className="schedule-row-title" title={activePlace.title}>
+                              {activePlace.title}
                             </span>
-                          )}
-                          <span className="schedule-row-title" title={activePlace.title}>
-                            {activePlace.title}
-                          </span>
-                        </div>
-                        
-                        {/* A안, B안이 있을 때만 클릭 가능한 점 표시 */}
-                        {isMultiOption && (
-                          <div className="place-pagination">
-                            {slot.options.map((_, dotIdx) => (
-                              <button
-                                key={dotIdx}
-                                type="button"
-                                className={(slot.selectedIndex ?? 0) === dotIdx ? 'is-active' : ''}
-                                onClick={() => onSelectOption(day.key, slotKey, dotIdx)}
-                                aria-label={`${dotIdx + 1}번째 옵션`}
-                              />
-                            ))}
                           </div>
-                        )}
+                        </div>
+
+                        <div className="place-actions">
+                          <button
+                            onClick={() => onReorder(day.key, index, index - 1)}
+                            disabled={index === 0}
+                            aria-label="위로 이동"
+                            title="위로 이동"
+                          >
+                            ↑
+                          </button>
+                          <button
+                            onClick={() => onDeletePlace(day.key, index)}
+                            aria-label={isMultiOption ? `${activePlace.title} 옵션 삭제` : `${activePlace.title} 삭제`}
+                            title={isMultiOption ? '현재 보이는 옵션만 삭제' : '삭제'}
+                          >
+                            삭제
+                          </button>
+                        </div>
                       </div>
 
-                      <div className="place-actions">
-                        <button
-                          onClick={() => onReorder(day.key, index, index - 1)}
-                          disabled={index === 0}
-                          aria-label="위로 이동"
-                          title="위로 이동"
-                        >
-                          ↑
-                        </button>
-                        <button
-                          onClick={() => onDeletePlace(day.key, index)}
-                          aria-label={isMultiOption ? `${activePlace.title} 옵션 삭제` : `${activePlace.title} 삭제`}
-                          title={isMultiOption ? '현재 보이는 옵션만 삭제' : '삭제'}
-                        >
-                          삭제
-                        </button>
-                      </div>
+                      {/* 카드 바깥(아래)에 위치하는 페이지네이션 점 */}
+                      {isMultiOption && (
+                        <div className="place-pagination">
+                          {slot.options.map((_, dotIdx) => (
+                            <button
+                              key={dotIdx}
+                              type="button"
+                              className={(slot.selectedIndex ?? 0) === dotIdx ? 'is-active' : ''}
+                              onClick={() => onSelectOption(day.key, slotKey, dotIdx)}
+                              aria-label={`${dotIdx + 1}번째 옵션`}
+                            />
+                          ))}
+                        </div>
+                      )}
                     </li>
                   );
                 })}
