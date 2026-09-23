@@ -194,10 +194,12 @@ function ShareSlotRow({
   rowRef,
 }) {
   const carouselRef = useRef(null);
-  const [swipeOffset, setSwipeOffset] = useState(0);
-  const touchStartX = useRef(0);
-  const touchCurrentX = useRef(0);
-  const isSwiping = useRef(false);
+  const [showMenu, setShowMenu] = useState(false); // 💡 액션 시트 메뉴 상태 추가
+  
+  const timerRef = useRef(null);
+  const isLongPress = useRef(false);
+
+  const currentPlace = slot.options[selectedIdx] || slot.options[0];
 
   useEffect(() => {
     if (carouselRef.current && selectedIdx > 0) {
@@ -209,49 +211,29 @@ function ShareSlotRow({
     }
   }, [selectedIdx]);
 
-  const handleTouchStart = (e) => {
-    touchStartX.current = e.touches[0].clientX;
-    isSwiping.current = true;
-  };
-
-  const handleTouchMove = (e) => {
-    if (!isSwiping.current) return;
-    touchCurrentX.current = e.touches[0].clientX;
-    const diffX = touchCurrentX.current - touchStartX.current;
-
-    if (diffX < 0) {
-      setSwipeOffset(Math.max(diffX, -80));
-    } else if (swipeOffset < 0) {
-      setSwipeOffset(Math.min(0, swipeOffset + diffX));
-    }
+  // 💡 0.5초 꾹 누르기 감지 로직 추가
+  const handleTouchStart = () => {
+    isLongPress.current = false;
+    timerRef.current = setTimeout(() => {
+      isLongPress.current = true;
+      if (navigator.vibrate) navigator.vibrate(40);
+      setShowMenu(true); // 0.5초 뒤 메뉴 열기
+    }, 500);
   };
 
   const handleTouchEnd = () => {
-    isSwiping.current = false;
-    if (swipeOffset < -40) {
-      setSwipeOffset(-80);
-    } else {
-      setSwipeOffset(0);
-    }
+    if (timerRef.current) clearTimeout(timerRef.current);
+  };
+
+  const handleCardClick = (place) => {
+    if (isLongPress.current) return; // 꾹 누른 거면 단순 클릭 이벤트(지도 이동) 무시
+    if (onCardClick) onCardClick(place);
   };
 
   return (
-    <li
-      ref={rowRef}
-      className={`share-slot-item ${isVisited ? 'is-visited' : ''}`}
-      onClick={() => {
-        const currentPlace = slot.options[selectedIdx] || slot.options[0];
-        if (currentPlace && onCardClick) onCardClick(currentPlace);
-      }}
-    >
+    <li ref={rowRef} className={`share-slot-item ${isVisited ? 'is-visited' : ''}`}>
       <div className="share-card-wrapper">
-        <div
-          className="share-card-content"
-          style={{ transform: `translateX(${swipeOffset}px)` }}
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
-        >
+        <div className="share-card-content">
           <div
             ref={carouselRef}
             className="share-slot-carousel"
@@ -266,7 +248,17 @@ function ShareSlotRow({
           >
             {slot.options.map((place, optIdx) => (
               <div key={`${place.lat}-${place.lng}-${optIdx}`} className="share-slot-option">
-                <div className="share-place-card">
+                <div
+                  className="share-place-card"
+                  // 💡 카드에 터치 및 클릭 이벤트 연결
+                  onTouchStart={handleTouchStart}
+                  onTouchEnd={handleTouchEnd}
+                  onTouchMove={handleTouchEnd}
+                  onMouseDown={handleTouchStart}
+                  onMouseUp={handleTouchEnd}
+                  onContextMenu={(e) => e.preventDefault()} // 모바일에서 꾹 누를 때 기본 메뉴 뜨는 것 방지
+                  onClick={() => handleCardClick(place)}
+                >
                   {place.photoUrl && (
                     <img src={resolveApiUrl(place.photoUrl)} alt="" loading="lazy" />
                   )}
@@ -285,18 +277,6 @@ function ShareSlotRow({
                       {String.fromCharCode(65 + optIdx)}안
                     </span>
                   )}
-
-                  <a
-                    href={`https://m.map.naver.com/search2/search.naver?query=${encodeURIComponent(
-                      place.title || place.roadAddress
-                    )}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="naver-map-link"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    네이버 지도 ↗
-                  </a>
                 </div>
               </div>
             ))}
@@ -313,19 +293,49 @@ function ShareSlotRow({
             </div>
           )}
         </div>
-
-        <button
-          type="button"
-          className={`share-visit-btn ${isVisited ? 'is-undo' : ''}`}
-          onClick={(e) => {
-            e.stopPropagation();
-            setSwipeOffset(0);
-            onToggleVisit(slot.id);
-          }}
-        >
-          {isVisited ? '방문 취소' : '방문 완료'}
-        </button>
       </div>
+
+      {/* 💡 액션 시트 (중간 메뉴) UI 추가 */}
+      {showMenu && (
+        <div className="action-sheet-backdrop" onClick={() => setShowMenu(false)}>
+          <div className="action-sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="action-sheet-header">
+              <strong>{currentPlace.title}</strong>
+            </div>
+
+            <button
+              type="button"
+              className="action-sheet-btn primary"
+              onClick={() => {
+                onToggleVisit(slot.id);
+                setShowMenu(false);
+              }}
+            >
+              {isVisited ? '↺ 방문 취소하기' : '✓ 방문 완료 처리'}
+            </button>
+
+            <a
+              href={`https://m.map.naver.com/search2/search.naver?query=${encodeURIComponent(
+                currentPlace.title || currentPlace.roadAddress
+              )}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="action-sheet-btn"
+              onClick={() => setShowMenu(false)}
+            >
+              🗺️ 네이버 지도로 보기 ↗
+            </a>
+
+            <button
+              type="button"
+              className="action-sheet-btn cancel"
+              onClick={() => setShowMenu(false)}
+            >
+              닫기
+            </button>
+          </div>
+        </div>
+      )}
     </li>
   );
 }
@@ -405,7 +415,7 @@ function SharePlanPage({ shareId }) {
 
   // 미방문 장소
   const unvisitedSlots = allSlots.filter((slot) => !visitedSlots[slot.id]);
-  
+
   // 방문 완료 장소 (오류 해결을 위해 변수 복구)
   const visitedSlotsList = allSlots.filter((slot) => visitedSlots[slot.id]);
 

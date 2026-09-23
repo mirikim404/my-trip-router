@@ -1207,23 +1207,7 @@ button:disabled {
   transition: transform 0.2s cubic-bezier(0.25, 1, 0.5, 1);
 }
 
-.share-visit-btn {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: 80px;
-  z-index: 1;
-  border: 0;
-  background: #22c55e;
-  color: #ffffff;
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
+
 
 .share-visit-btn.is-undo {
   background: #64748b; /* 복원(방문 취소) 버튼 색상 */
@@ -1275,4 +1259,91 @@ button:disabled {
 
 .naver-map-link:active {
   background: #dcfce7;
+}
+
+/* -------------------------------------
+   액션 시트 (꾹 누르기 메뉴) 스타일
+------------------------------------- */
+.action-sheet-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 9999;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  animation: fadeIn 0.2s ease;
+}
+
+.action-sheet {
+  width: 100%;
+  max-width: 480px; /* PC에서도 너무 넓어지지 않게 */
+  background: #ffffff;
+  border-top-left-radius: 20px;
+  border-top-right-radius: 20px;
+  padding: 20px 16px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.15);
+  animation: slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.action-sheet-header {
+  text-align: center;
+  padding: 4px 0 16px;
+  border-bottom: 1px solid #f1f3f5;
+  color: #212529;
+  font-size: 16px;
+  margin-bottom: 4px;
+}
+
+.action-sheet-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 15px;
+  border: none;
+  border-radius: 12px;
+  background: #f8f9fa;
+  color: #212529;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  box-sizing: border-box;
+  transition: background 0.1s;
+}
+
+.action-sheet-btn:active {
+  background: #e9ecef;
+}
+
+.action-sheet-btn.primary {
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.action-sheet-btn.primary:active {
+  background: #1d4ed8;
+}
+
+.action-sheet-btn.cancel {
+  background: #f1f3f5;
+  color: #495057;
+  margin-top: 8px;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
 }
