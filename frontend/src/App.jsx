@@ -322,16 +322,27 @@ function SharePlanPage({ shareId }) {
                       }}
                     >
                       {slot.options.map((place, optIdx) => (
-                        <div key={`${place.lat}-${place.lng}-${optIdx}`} style={{ flex: '0 0 100%', scrollSnapAlign: 'start', paddingRight: '12px' }}>
+                        <div 
+                          key={`${place.lat}-${place.lng}-${optIdx}`} 
+                          style={{ flex: '0 0 100%', scrollSnapAlign: 'start', paddingRight: '12px', boxSizing: 'border-box' }} // boxSizing 추가
+                        >
                           <div className="share-place-card" style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
                             {place.photoUrl && <img src={resolveApiUrl(place.photoUrl)} alt="" loading="lazy" style={{ width: '56px', height: '56px', borderRadius: '8px', objectFit: 'cover', flexShrink: 0 }} />}
-                            <div>
-                              <strong style={{ display: 'block', fontSize: '15px', color: '#1e293b' }}>
+                            
+                            {/* 텍스트 영역 너비 찌그러짐 방지 (flex: 1, minWidth: 0) */}
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <strong style={{ display: 'block', fontSize: '15px', color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                 {index + 1}. {slot.options.length > 1 && <span style={{ color: '#2563eb', marginRight: '6px' }}>{String.fromCharCode(65 + optIdx)}안</span>}
                                 {place.title}
                               </strong>
-                              <span style={{ display: 'block', fontSize: '13px', color: '#64748b', marginTop: '2px' }}>{place.roadAddress || place.address || '주소 정보 없음'}</span>
-                              {(place.primaryType || place.placeType) && <em style={{ display: 'block', fontSize: '12px', color: '#94a3b8', fontStyle: 'normal', marginTop: '4px' }}>{place.primaryType || place.placeType}</em>}
+                              <span style={{ display: 'block', fontSize: '13px', color: '#64748b', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {place.roadAddress || place.address || '주소 정보 없음'}
+                              </span>
+                              {(place.primaryType || place.placeType) && (
+                                <em style={{ display: 'block', fontSize: '12px', color: '#94a3b8', fontStyle: 'normal', marginTop: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  {place.primaryType || place.placeType}
+                                </em>
+                              )}
                             </div>
                           </div>
                         </div>
