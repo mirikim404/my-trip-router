@@ -45,7 +45,7 @@ const Sidebar = ({
   // 슬롯 자체의 id를 키로 쓰고, 실제 경로 계산에는 슬롯이 현재 보여주고 있는
   // 옵션(선택된 A안/B안 하나)만 골라 넘긴다.
   const getSlotKey = (slot) => slot.id;
-  const getActivePlace = (slot) => slot.options[slot.selectedIndex ?? 0];
+  const getActivePlace = (slot) => slot.options[slot.selectedIndex ?? 0] ?? slot;
 
   const getSelectedPlaces = (day) => {
     const selectedKeys = selectedPlaces[day];
@@ -158,7 +158,7 @@ const Sidebar = ({
                   const activePlace = getActivePlace(slot);
                   const selectedKeys = selectedPlaces[day.key];
                   const isSelected = !selectedKeys || selectedKeys.includes(slotKey);
-                  const isMultiOption = slot.options.length > 1;
+                  const isMultiOption = (slot.options.length ?? 0) > 1;
                   const dropClass = dropTarget?.index === index ? ` drop-${dropTarget.mode}` : '';
 
                   return (

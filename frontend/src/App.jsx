@@ -48,10 +48,21 @@ const buildTripDays = (startDate, endDate) => {
   return days;
 };
 
+// 예전 버전(옵션/드래그 병합 기능 이전)의 로컬스토리지 데이터는
+// 슬롯이 아니라 장소 객체 그대로 저장돼 있을 수 있다. 그런 항목을
+// 만나면 옵션이 1개뿐인 슬롯으로 감싸서 새 형식과 항상 호환되게 한다.
+const normalizeSlot = (item) => (
+  item && Array.isArray(item.options)
+    ? item
+    : { id: createSlotId(), options: [item], selectedIndex: 0 }
+);
+
 const createEmptyItinerary = (days, previous = {}) => (
   days.reduce((nextItinerary, day) => ({
     ...nextItinerary,
-    [day.key]: Array.isArray(previous[day.key]) ? previous[day.key] : [],
+    [day.key]: Array.isArray(previous[day.key])
+      ? previous[day.key].map(normalizeSlot)
+      : [],
   }), {})
 );
 
@@ -485,8 +496,8 @@ function App() {
     setItinerary((previous) => {
       const slots = previous[day] || [];
       const fromSlot = slots.find((slot) => slot.id === fromSlotId);
-      const toSlot = slots.find((slot) => slot.id === toSlotId);
-      if (!fromSlot || !toSlot) return previous;
+      const targetSlot = slots.find((slot) => slot.id === toSlotId);
+      if (!fromSlot || !targetSlot) return previous;
 
       const fromIndex = fromSlot.selectedIndex ?? 0;
       const movingOption = fromSlot.options[fromIndex];
