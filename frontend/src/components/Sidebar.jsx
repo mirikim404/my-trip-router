@@ -1,6 +1,5 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import Search from './Search';
-import { OptionSwiper } from './DayScheduleCard';
 import { useBottomSheet } from '../utils/useBottomSheet';
 
 const EDGE_ZONE_RATIO = 0.25;
@@ -194,12 +193,32 @@ const Sidebar = ({
                       </span>
 
                       <div className="place-options">
-                        <span className="place-index">{index + 1}.</span>
-                        <OptionSwiper
-                          options={slot.options}
-                          selectedIndex={slot.selectedIndex ?? 0}
-                          onSelect={(nextIndex) => onSelectOption(day.key, slotKey, nextIndex)}
-                        />
+                        <div className="place-title-row">
+                          <span className="place-index">{index + 1}.</span>
+                          {isMultiOption && (
+                            <span className={`schedule-badge schedule-badge-${(slot.selectedIndex ?? 0) % 2 === 0 ? 'a' : 'b'}`}>
+                              {String.fromCharCode(65 + (slot.selectedIndex ?? 0))}
+                            </span>
+                          )}
+                          <span className="schedule-row-title" title={activePlace.title}>
+                            {activePlace.title}
+                          </span>
+                        </div>
+                        
+                        {/* A안, B안이 있을 때만 클릭 가능한 점 표시 */}
+                        {isMultiOption && (
+                          <div className="place-pagination">
+                            {slot.options.map((_, dotIdx) => (
+                              <button
+                                key={dotIdx}
+                                type="button"
+                                className={(slot.selectedIndex ?? 0) === dotIdx ? 'is-active' : ''}
+                                onClick={() => onSelectOption(day.key, slotKey, dotIdx)}
+                                aria-label={`${dotIdx + 1}번째 옵션`}
+                              />
+                            ))}
+                          </div>
+                        )}
                       </div>
 
                       <div className="place-actions">
