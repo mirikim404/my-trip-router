@@ -211,14 +211,13 @@ app.post('/api/plans', async (req, res) => {
   }
 });
 
-// [수정됨] 일정 공유: 조회(GET)
+
 app.get('/api/plans/:id', async (req, res) => {
   try {
     const planDoc = await Plan.findOne({ shareId: req.params.id });
 
     if (!planDoc) return res.status(404).json({ error: 'Plan not found.' });
     
-    // DB에서 찾은 실제 일정 데이터 반환
     res.json(planDoc.planData);
   } catch (error) {
     console.error('Plan read error:', error);
@@ -226,7 +225,6 @@ app.get('/api/plans/:id', async (req, res) => {
   }
 });
 
-// 장소 검색 API 프록시 (NAVER API HUB - 지역 검색)
 app.get('/api/search', async (req, res) => {
   try {
     const { query } = req.query;
@@ -249,10 +247,6 @@ app.get('/api/search', async (req, res) => {
 const EARTH_RADIUS_M = 6371000;
 const toRadians = (deg) => (deg * Math.PI) / 180;
 
-// 직선거리 기준으로 "걸어서 다닐 만한 거리"인지 대략 판단한다. 대중교통
-// 전용으로만 길을 찾으면 바로 옆 장소끼리도 정류장까지 갔다가 버스를
-// 타는 식으로 돌아가는 경로가 나오기 때문에, 가까운 구간은 도보(WALK)
-// 경로를 우선 확인한다.
 const haversineDistanceMeters = (a, b) => {
   const dLat = toRadians(b.lat - a.lat);
   const dLng = toRadians(b.lng - a.lng);
@@ -301,50 +295,44 @@ const formatTransitLeg = (origin, destination, route) => ({
   steps: route.legs?.flatMap(leg => leg.steps || []) || []
 });
   
-app.post('/api/place-details', async (req, res) => {
+app.post('/api/transit', async (req, res) => {
   try {
-    const { title, address, lat, lng } = req.body;
-    const hasCoordinates = Number.isFinite(Number(lat)) && Number.isFinite(Number(lng));
-    const response = await axios.post('https://places.googleapis.com/v1/places:searchText', {
-      textQuery: `${title} ${address || ''}`.trim(),
-      languageCode: 'ko',
-      regionCode: 'KR',
-      maxResultCount: 1,
-      ...(hasCoordinates ? {
-        locationBias: {
-          circle: {
-            center: { latitude: Number(lat), longitude: Number(lng) },
-            radius: 10000
-          }
+    const { places } = req.body;
+
+    if (!Array.isArray(places) || places.length < 2) {
+      return res.status(400).json({ error: 'At least two places are required.' });
+    }
+
+    const legs = [];
+
+    for (let index = 0; index < places.length - 1; index += 1) {
+      const origin = places[index];
+      const destination = places[index + 1];
+
+      try {
+        const route = await requestTransitRoute(origin, destination);
+        
+        if (!route) {
+          return res.status(422).json({ 
+            error: `${origin.title}에서 ${destination.title}(으)로 가는 경로를 찾지 못했습니다.` 
+          });
         }
-      } : {})
-    }, {
-      headers: {
-        'X-Goog-Api-Key': GOOGLE_MAPS_API_KEY,
-        'X-Goog-FieldMask': 'places.displayName,places.formattedAddress,places.googleMapsUri,places.nationalPhoneNumber,places.primaryTypeDisplayName,places.priceLevel,places.photos.name'
+        
+        legs.push(formatTransitLeg(origin, destination, route));
+      } catch (err) {
+        console.error(`Route fetch error (${origin.title} -> ${destination.title}):`, err.message);
+        return res.status(422).json({ 
+          error: `${origin.title}에서 ${destination.title}(으)로 가는 경로 조회 중 오류가 발생했습니다.` 
+        });
       }
-    });
-  
-    const place = response.data.places?.[0];
-    if (!place) return res.json({});
-  
-    const photoName = place.photos?.[0]?.name;
-    res.json({
-      displayName: place.displayName?.text,
-      formattedAddress: place.formattedAddress,
-      googleMapsUri: place.googleMapsUri,
-      nationalPhoneNumber: place.nationalPhoneNumber,
-      primaryType: place.primaryTypeDisplayName?.text,
-      priceLevel: place.priceLevel,
-      photoUrl: photoName
-        ? `/api/place-photo?name=${encodeURIComponent(photoName)}`
-        : null
-    });
+    }
+
+    res.json({ provider: 'google-transit', places, legs });
   } catch (error) {
     const status = error.response?.status || 500;
     const details = error.response?.data || error.message;
-    console.error('Google 장소 API 에러:', details);
-    res.status(status).json({ error: 'Place Details API Error', details });
+    console.error('대중교통 API 에러:', details);
+    res.status(status).json({ error: 'Transit API Error', details });
   }
 });
   
