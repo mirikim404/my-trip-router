@@ -234,33 +234,37 @@ function ShareSlotRow({
                   className="share-place-card"
                   onClick={() => handleCardClick(place)}
                 >
-                  {place.photoUrl && (
-                    <img src={resolveApiUrl(place.photoUrl)} alt="" loading="lazy" />
-                  )}
-                  <div className="share-place-info">
-                    {/* ★ 장소 이름과 A/B안 배지를 나란히 배치 */}
-                    <div className="share-place-title-wrap">
-                      <strong>
-                        {!isVisited && `${index + 1}. `}{place.title}
-                      </strong>
+                  {/* ★ 사진과 A/B안 뱃지를 겹쳐서 표시하는 래퍼 */}
+                  {(place.photoUrl || slot.options.length > 1) && (
+                    <div className="share-place-image-wrap">
+                      {place.photoUrl && (
+                        <img src={resolveApiUrl(place.photoUrl)} alt="" loading="lazy" />
+                      )}
                       {slot.options.length > 1 && (
-                        <span className="inline-option-badge">
+                        <span className="overlay-option-badge">
                           {String.fromCharCode(65 + optIdx)}안
                         </span>
                       )}
                     </div>
+                  )}
+
+                  {/* ★ 텍스트 정보 (장소명 원복) */}
+                  <div className="share-place-info">
+                    <strong>
+                      {!isVisited && `${index + 1}. `}{place.title}
+                    </strong>
                     <span>{place.roadAddress || place.address || '주소 정보 없음'}</span>
                     {(place.primaryType || place.placeType) && (
                       <em>{place.primaryType || place.placeType}</em>
                     )}
                   </div>
 
-                  {/* ★ 우측 상단 더보기(점 3개) 버튼 */}
+                  {/* 우측 상단 더보기 버튼 */}
                   <button
                     type="button"
                     className="more-options-btn"
                     onClick={(e) => {
-                      e.stopPropagation(); // 카드 클릭(지도 이동) 방지
+                      e.stopPropagation();
                       setShowMenu(true);
                     }}
                     aria-label="더보기 메뉴 열기"
