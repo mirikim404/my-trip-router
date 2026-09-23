@@ -182,15 +182,20 @@ const MapViewer = ({ places, routeData, fitToPlaces = false }) => {
       // 리사이즈를 강제로 알려서 최신 컨테이너 크기로 다시 계산하게 한다.
       window.naver.maps.Event.trigger(mapInstance.current, 'resize');
 
-      routeData.legs.flatMap(leg => leg.paths || []).forEach(path => {
-        const polyline = new window.naver.maps.Polyline({
-          path: path.map(point => new window.naver.maps.LatLng(point.lat, point.lng)),
-          strokeColor: '#2563eb',
-          strokeOpacity: 0.8,
-          strokeWeight: 5,
-          map: mapInstance.current,
+      routeData.legs.forEach(leg => {
+        // 길찾기 결과가 없어 직선으로 대체한 구간(mode: 'STRAIGHT')은 점선으로 구분한다.
+        const isStraight = leg.mode === 'STRAIGHT';
+        (leg.paths || []).forEach(path => {
+          const polyline = new window.naver.maps.Polyline({
+            path: path.map(point => new window.naver.maps.LatLng(point.lat, point.lng)),
+            strokeColor: isStraight ? '#6b7280' : '#2563eb',
+            strokeStyle: isStraight ? 'shortdash' : 'solid',
+            strokeOpacity: 0.8,
+            strokeWeight: isStraight ? 4 : 5,
+            map: mapInstance.current,
+          });
+          polylineInstances.current.push(polyline);
         });
-        polylineInstances.current.push(polyline);
       });
     }
   }, [places, routeData, fitToPlaces, isMapReady]);

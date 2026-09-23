@@ -73,7 +73,9 @@ const sanitizeRouteData = (routeData) => {
       ));
       return points.every(Boolean) ? points : null;
     });
-    return paths.every(Boolean) ? { paths } : null;
+    return paths.every(Boolean)
+      ? { paths, ...(leg.mode === 'STRAIGHT' ? { mode: 'STRAIGHT' } : {}) }
+      : null;
   });
 
   if (!legs.every(Boolean)) return null;
@@ -257,20 +259,23 @@ const haversineDistanceMeters = (a, b) => {
 };
 
 const WALKABLE_DISTANCE_METERS = 1200; // 대략 도보 15분 이내
+const WALK_SPEED_MPS = 1.25;           // 직선 폴백 구간의 소요시간 추정용
+const WALK_DETOUR_FACTOR = 1.3;        // 직선거리 → 실제 보행거리 보정
 
-const requestTransitRoute = async (origin, destination) => {
-  const isWalkable = haversineDistanceMeters(origin, destination) <= WALKABLE_DISTANCE_METERS;
-
+// Google Routes API 호출.
+// - 경로가 없으면(빈 응답) null 을 돌려준다.
+// - HTTP 에러(키/권한/쿼터 문제 등)는 그대로 throw 한다.
+const computeGoogleRoute = async (origin, destination, travelMode) => {
   const response = await axios.post('https://routes.googleapis.com/directions/v2:computeRoutes', {
     origin: { location: { latLng: { latitude: origin.lat, longitude: origin.lng } } },
     destination: { location: { latLng: { latitude: destination.lat, longitude: destination.lng } } },
-    travelMode: isWalkable ? 'WALK' : 'TRANSIT',
-    ...(isWalkable ? {} : {
+    travelMode,
+    ...(travelMode === 'TRANSIT' ? {
       transitPreferences: {
         routingPreference: 'FEWER_TRANSFERS',
         allowedTravelModes: ['BUS', 'SUBWAY']
       }
-    })
+    } : {})
   }, {
     headers: {
       'X-Goog-Api-Key': GOOGLE_MAPS_API_KEY,
@@ -281,11 +286,14 @@ const requestTransitRoute = async (origin, destination) => {
   return response.data.routes?.[0] || null;
 };
 
-const durationInSeconds = (duration = '0s') => Number.parseFloat(duration.replace('s', ''));
+const googleErrorMessage = (error) => (
+  error.response?.data?.error?.message || error.message
+);
 
-const formatTransitLeg = (origin, destination, route) => ({
+const formatTransitLeg = (origin, destination, route, mode) => ({
   from: origin.title,
   to: destination.title,
+  mode,
   duration: route.duration,
   localizedValues: route.localizedValues,
   paths: (route.legs?.flatMap(leg => leg.steps || []) || [])
@@ -294,45 +302,120 @@ const formatTransitLeg = (origin, destination, route) => ({
     .map(decodePolyline),
   steps: route.legs?.flatMap(leg => leg.steps || []) || []
 });
-  
+
+// Google이 경로를 주지 못하는 구간(한국은 도보 길찾기 미지원, 심야 대중교통 없음 등)에서도
+// 전체 경로 만들기가 실패하지 않도록, 두 장소를 잇는 직선 구간으로 대신한다.
+// mode: 'STRAIGHT' 는 프론트에서 점선으로 그려 실제 길이 아님을 구분한다.
+const buildStraightLeg = (origin, destination) => {
+  const meters = haversineDistanceMeters(origin, destination);
+  const seconds = Math.round((meters * WALK_DETOUR_FACTOR) / WALK_SPEED_MPS);
+  return {
+    from: origin.title,
+    to: destination.title,
+    mode: 'STRAIGHT',
+    duration: `${seconds}s`,
+    localizedValues: null,
+    paths: [[
+      { lat: origin.lat, lng: origin.lng },
+      { lat: destination.lat, lng: destination.lng }
+    ]],
+    steps: []
+  };
+};
+
+const buildLeg = async (origin, destination) => {
+  const isWalkable = haversineDistanceMeters(origin, destination) <= WALKABLE_DISTANCE_METERS;
+
+  if (isWalkable) {
+    // 가까운 구간은 도보를 먼저 시도한다. 다만 Google은 한국에서 도보 길찾기를
+    // 제공하지 않아 빈 응답/에러가 오므로, 실패하면 직선 구간으로 대신한다.
+    try {
+      const route = await computeGoogleRoute(origin, destination, 'WALK');
+      const leg = route && formatTransitLeg(origin, destination, route, 'WALK');
+      if (leg && leg.paths.length > 0) return leg;
+    } catch (error) {
+      console.warn(`도보 경로 없음 (${origin.title} -> ${destination.title}):`, googleErrorMessage(error));
+    }
+    return buildStraightLeg(origin, destination);
+  }
+
+  // 먼 구간은 대중교통. HTTP 에러(키/권한 문제)는 숨기지 않고 그대로 올려보낸다.
+  const route = await computeGoogleRoute(origin, destination, 'TRANSIT');
+  const leg = route && formatTransitLeg(origin, destination, route, 'TRANSIT');
+  if (leg && leg.paths.length > 0) return leg;
+
+  console.warn(`대중교통 경로 없음 (${origin.title} -> ${destination.title}) - 직선 구간으로 대체`);
+  return buildStraightLeg(origin, destination);
+};
+
+// 사용자가 정한 방문 순서 그대로 구간별 경로를 만든다.
 app.post('/api/transit', async (req, res) => {
   try {
     const { places } = req.body;
 
-    if (!Array.isArray(places) || places.length < 2) {
-      return res.status(400).json({ error: 'At least two places are required.' });
+    if (
+      !Array.isArray(places) || places.length < 2
+      || !places.every((place) => Number.isFinite(place?.lat) && Number.isFinite(place?.lng))
+    ) {
+      return res.status(400).json({ error: '좌표가 있는 장소가 2개 이상 필요해요.' });
     }
 
     const legs = [];
-
     for (let index = 0; index < places.length - 1; index += 1) {
-      const origin = places[index];
-      const destination = places[index + 1];
-
-      try {
-        const route = await requestTransitRoute(origin, destination);
-        
-        if (!route) {
-          return res.status(422).json({ 
-            error: `${origin.title}에서 ${destination.title}(으)로 가는 경로를 찾지 못했습니다.` 
-          });
-        }
-        
-        legs.push(formatTransitLeg(origin, destination, route));
-      } catch (err) {
-        console.error(`Route fetch error (${origin.title} -> ${destination.title}):`, err.message);
-        return res.status(422).json({ 
-          error: `${origin.title}에서 ${destination.title}(으)로 가는 경로 조회 중 오류가 발생했습니다.` 
-        });
-      }
+      legs.push(await buildLeg(places[index], places[index + 1]));
     }
 
     res.json({ provider: 'google-transit', places, legs });
   } catch (error) {
+    console.error('대중교통 API 에러:', error.response?.data || error.message);
+    res.status(502).json({ error: `Google 경로 API 호출에 실패했어요: ${googleErrorMessage(error)}` });
+  }
+});
+
+app.post('/api/place-details', async (req, res) => {
+  try {
+    const { title, address, lat, lng } = req.body;
+    const hasCoordinates = Number.isFinite(Number(lat)) && Number.isFinite(Number(lng));
+    const response = await axios.post('https://places.googleapis.com/v1/places:searchText', {
+      textQuery: `${title} ${address || ''}`.trim(),
+      languageCode: 'ko',
+      regionCode: 'KR',
+      maxResultCount: 1,
+      ...(hasCoordinates ? {
+        locationBias: {
+          circle: {
+            center: { latitude: Number(lat), longitude: Number(lng) },
+            radius: 10000
+          }
+        }
+      } : {})
+    }, {
+      headers: {
+        'X-Goog-Api-Key': GOOGLE_MAPS_API_KEY,
+        'X-Goog-FieldMask': 'places.displayName,places.formattedAddress,places.googleMapsUri,places.nationalPhoneNumber,places.primaryTypeDisplayName,places.priceLevel,places.photos.name'
+      }
+    });
+  
+    const place = response.data.places?.[0];
+    if (!place) return res.json({});
+  
+    const photoName = place.photos?.[0]?.name;
+    res.json({
+      displayName: place.displayName?.text,
+      formattedAddress: place.formattedAddress,
+      googleMapsUri: place.googleMapsUri,
+      nationalPhoneNumber: place.nationalPhoneNumber,
+      primaryType: place.primaryTypeDisplayName?.text,
+      priceLevel: place.priceLevel,
+      photoUrl: photoName
+        ? `/api/place-photo?name=${encodeURIComponent(photoName)}`
+        : null
+    });
+  } catch (error) {
     const status = error.response?.status || 500;
     const details = error.response?.data || error.message;
-    console.error('대중교통 API 에러:', details);
-    res.status(status).json({ error: 'Transit API Error', details });
+    console.error('Google 장소 API 에러:', details);
+    res.status(status).json({ error: 'Place Details API Error', details });
   }
 });
 
@@ -383,59 +466,6 @@ app.get('/api/place-photo', async (req, res) => {
   } catch (error) {
     console.error('Google 사진 API 에러:', error.response?.data || error.message);
     res.status(error.response?.status || 500).end();
-  }
-});
-
-app.post('/api/transit', async (req, res) => {
-  try {
-    const { places } = req.body;
-
-    if (!Array.isArray(places) || places.length < 2) {
-      return res.status(400).json({ error: 'At least two places are required.' });
-    }
-
-    const routeCache = new Map();
-    const getRoute = async (origin, destination) => {
-      const key = `${origin.lat},${origin.lng}->${destination.lat},${destination.lng}`;
-      if (!routeCache.has(key)) routeCache.set(key, requestTransitRoute(origin, destination));
-      return routeCache.get(key);
-    };
-
-    const orderedPlaces = [places[0]];
-    const remainingPlaces = places.slice(1);
-
-    while (remainingPlaces.length > 0) {
-      const origin = orderedPlaces[orderedPlaces.length - 1];
-      const candidates = await Promise.all(remainingPlaces.map(async place => ({
-        place,
-        route: await getRoute(origin, place).catch(() => null)
-      })));
-      const reachable = candidates.filter(candidate => candidate.route);
-
-      if (reachable.length === 0) {
-        return res.status(422).json({ error: `${origin.title}에서 남은 장소까지 대중교통 경로를 찾지 못했습니다.` });
-      }
-
-      reachable.sort((a, b) => (
-        durationInSeconds(a.route.duration) - durationInSeconds(b.route.duration)
-      ));
-      const nextPlace = reachable[0].place;
-      orderedPlaces.push(nextPlace);
-      remainingPlaces.splice(remainingPlaces.indexOf(nextPlace), 1);
-    }
-
-    const legs = [];
-    for (let index = 0; index < orderedPlaces.length - 1; index += 1) {
-      const route = await getRoute(orderedPlaces[index], orderedPlaces[index + 1]);
-      legs.push(formatTransitLeg(orderedPlaces[index], orderedPlaces[index + 1], route));
-    }
-
-    res.json({ provider: 'google-transit', places: orderedPlaces, legs });
-  } catch (error) {
-    const status = error.response?.status || 500;
-    const details = error.response?.data || error.message;
-    console.error('대중교통 API 에러:', details);
-    res.status(status).json({ error: 'Transit API Error', details });
   }
 });
 

@@ -523,8 +523,10 @@ function App() {
         [day]: { places: optimizedPlaces, routeData },
       }));
     } catch (error) {
-      const details = error.response?.data?.details;
-      const message = typeof details === 'string' ? details : details?.message || details?.error?.message;
+      const data = error.response?.data;
+      const details = data?.details;
+      const message = data?.error
+        || (typeof details === 'string' ? details : details?.message || details?.error?.message);
       alert(message || '경로 탐색에 실패했어요.');
     }
   };
