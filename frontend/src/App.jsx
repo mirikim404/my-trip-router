@@ -2,14 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import './App.css';
 import Sidebar from './components/Sidebar';
 import MapViewer from './components/MapViewer';
-import { fetchTransitDirections } from './api/naverApi';
 import { fetchSharedPlan, saveSharedPlan } from './api/shareApi';
 import { PUBLIC_BASE_URL, resolveApiUrl } from './api/config';
 import { useBottomSheet, BOTTOM_SHEET_PEEK_RATIO } from './utils/useBottomSheet';
 
 const PROFILE_STORAGE_KEY = 'myTripProfile';
 const PLAN_STORAGE_KEY = 'myTripPlan';
-const ROUTES_STORAGE_KEY = 'myTripRoutes';
 
 const parseDate = (value) => {
   const [year, month, day] = value.split('-').map(Number);
@@ -69,9 +67,6 @@ const getShareIdFromPath = () => {
   return match?.[1] || null;
 };
 
-// itinerary[day]의 각 항목("슬롯")을 구분하기 위한 id.
-// 슬롯은 { id, options: [place, ...], selectedIndex } 형태로,
-// 장소 하나를 다른 장소 위로 드래그해서 합치면 options가 2개 이상이 된다.
 let slotIdSeed = 0;
 const createSlotId = () => `slot-${Date.now()}-${slotIdSeed++}`;
 
@@ -159,9 +154,6 @@ function SignupScreen({ onCreateTrip }) {
   );
 }
 
-// 공유 화면의 진입 페이지: 트래블러 이름/날짜 같은, 지도를 볼 때는 필요
-// 없는 정보와 day 선택을 여기서 한 번에 끝낸다. 이후 지도 페이지에는
-// 선택한 day 하나만 남기고, 이 정보들은 다시 보여주지 않는다.
 function ShareEntryPage({ profile, itinerary, onSelectDay }) {
   const days = profile.days || [];
 
@@ -195,8 +187,8 @@ function SharePlanPage({ shareId }) {
   const [plan, setPlan] = useState(null);
   const [selectedDay, setSelectedDay] = useState('');
   const [status, setStatus] = useState('loading');
-  // 'select': day를 고르는 진입 페이지 / 'map': 고른 day의 지도 페이지
   const [view, setView] = useState('select');
+  const [slotSelections, setSlotSelections] = useState({});
 
   const {
     sheetHeight,
@@ -241,11 +233,8 @@ function SharePlanPage({ shareId }) {
     );
   }
 
-  const { profile, itinerary, routesByDay = {} } = plan;
+  const { profile, itinerary } = plan;
   const days = profile.days || [];
-  // 공유된 itinerary도 슬롯({ id, options, selectedIndex }) 형태이므로,
-  // 보여줄 때는 각 슬롯이 현재 가리키는 옵션(장소) 하나로 펼쳐서 쓴다.
-  const toActivePlace = (slot) => slot.options?.[slot.selectedIndex ?? 0] || slot;
 
   if (view === 'select') {
     return (
@@ -262,17 +251,16 @@ function SharePlanPage({ shareId }) {
 
   const activeDay = days.find((day) => day.key === selectedDay) || days[0];
   const slots = activeDay ? itinerary[activeDay.key] || [] : [];
-  const places = slots.map(toActivePlace);
-  const activeDayRoute = activeDay ? routesByDay[activeDay.key] : null;
-  // 경로가 만들어져 있으면 정렬된 순서(출발→도착)로 지도를 그리고, 없으면
-  // 저장된 목록 그대로 마커만 보여준다.
-  const mapPlaces = activeDayRoute?.places || places;
-  const mapRouteData = activeDayRoute?.routeData || null;
+  
+  const mapPlaces = slots.map((slot) => {
+    const idx = slotSelections[slot.id] ?? slot.selectedIndex ?? 0;
+    return slot.options[idx] || slot.options[0];
+  });
 
   return (
     <main className="share-shell">
       <div className="share-map-pane">
-        <MapViewer places={mapPlaces} routeData={mapRouteData} fitToPlaces />
+        <MapViewer places={mapPlaces} fitToPlaces />
       </div>
 
       <section
@@ -310,23 +298,55 @@ function SharePlanPage({ shareId }) {
         <div className="share-list" aria-label={`${activeDay?.label || 'Day'} 장소 목록`}>
           <div className="share-list-header">
             <h2>{activeDay?.label}</h2>
-            <span>{places.length}곳</span>
+            <span>{slots.length}곳</span>
           </div>
 
-          {places.length === 0 ? (
+          {slots.length === 0 ? (
             <p className="empty-state">아직 추가된 장소가 없어요.</p>
           ) : (
-            <ol>
-              {places.map((place, index) => (
-                <li key={`${place.title}-${place.lat}-${place.lng}-${index}`}>
-                  {place.photoUrl && <img src={resolveApiUrl(place.photoUrl)} alt="" loading="lazy" />}
-                  <div>
-                    <strong>{place.title}</strong>
-                    <span>{place.roadAddress || place.address || '주소 정보 없음'}</span>
-                    {place.primaryType || place.placeType ? <em>{place.primaryType || place.placeType}</em> : null}
-                  </div>
-                </li>
-              ))}
+            <ol className="share-slots" style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+              {slots.map((slot, index) => {
+                const selectedIdx = slotSelections[slot.id] ?? slot.selectedIndex ?? 0;
+                return (
+                  <li key={slot.id} className="share-slot-item" style={{ paddingBottom: '20px' }}>
+                    <div
+                      className="share-slot-carousel"
+                      style={{ display: 'flex', overflowX: 'auto', scrollSnapType: 'x mandatory', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
+                      onScroll={(e) => {
+                        const width = e.target.clientWidth;
+                        if (width === 0) return;
+                        const newIndex = Math.round(e.target.scrollLeft / width);
+                        if (newIndex !== selectedIdx && newIndex < slot.options.length) {
+                          setSlotSelections((prev) => ({ ...prev, [slot.id]: newIndex }));
+                        }
+                      }}
+                    >
+                      {slot.options.map((place, optIdx) => (
+                        <div key={`${place.lat}-${place.lng}-${optIdx}`} style={{ flex: '0 0 100%', scrollSnapAlign: 'start', paddingRight: '12px' }}>
+                          <div className="share-place-card" style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                            {place.photoUrl && <img src={resolveApiUrl(place.photoUrl)} alt="" loading="lazy" style={{ width: '56px', height: '56px', borderRadius: '8px', objectFit: 'cover', flexShrink: 0 }} />}
+                            <div>
+                              <strong style={{ display: 'block', fontSize: '15px', color: '#1e293b' }}>
+                                {index + 1}. {slot.options.length > 1 && <span style={{ color: '#2563eb', marginRight: '6px' }}>{String.fromCharCode(65 + optIdx)}안</span>}
+                                {place.title}
+                              </strong>
+                              <span style={{ display: 'block', fontSize: '13px', color: '#64748b', marginTop: '2px' }}>{place.roadAddress || place.address || '주소 정보 없음'}</span>
+                              {(place.primaryType || place.placeType) && <em style={{ display: 'block', fontSize: '12px', color: '#94a3b8', fontStyle: 'normal', marginTop: '4px' }}>{place.primaryType || place.placeType}</em>}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {slot.options.length > 1 && (
+                      <div className="share-slot-dots" style={{ display: 'flex', justifyContent: 'center', gap: '6px', marginTop: '12px' }}>
+                        {slot.options.map((_, dotIdx) => (
+                          <span key={dotIdx} style={{ width: '6px', height: '6px', borderRadius: '50%', background: selectedIdx === dotIdx ? '#2563eb' : '#e2e8f0', transition: 'background 0.2s' }} />
+                        ))}
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
             </ol>
           )}
         </div>
@@ -346,7 +366,7 @@ function App() {
       ? createEmptyItinerary(initialProfile.days, savedPlan || {})
       : savedPlan || {};
   });
-  const [routesByDay, setRoutesByDay] = useState(() => loadJson(ROUTES_STORAGE_KEY) || {});
+  
   const [activeDay, setActiveDay] = useState(() => initialProfile?.days?.[0]?.key || '');
   const [shareStatus, setShareStatus] = useState({ isSaving: false, url: '', copied: false });
   
@@ -365,25 +385,11 @@ function App() {
     if (!shareId) localStorage.setItem(PLAN_STORAGE_KEY, JSON.stringify(itinerary));
   }, [itinerary, shareId]);
 
-  useEffect(() => {
-    if (!shareId) localStorage.setItem(ROUTES_STORAGE_KEY, JSON.stringify(routesByDay));
-  }, [routesByDay, shareId]);
-
-  const clearDayRoute = (day) => {
-    setRoutesByDay((previous) => {
-      if (!previous[day]) return previous;
-      const next = { ...previous };
-      delete next[day];
-      return next;
-    });
-  };
-
   const handleCreateTrip = ({ travelerName, startDate, endDate }) => {
     const days = buildTripDays(startDate, endDate);
     setProfile({ travelerName, startDate, endDate, days });
     setItinerary((previous) => createEmptyItinerary(days, previous));
     setActiveDay(days[0]?.key || '');
-    setRoutesByDay({});
     setShareStatus({ isSaving: false, url: '', copied: false });
     
     setCurrentShareId(null);
@@ -406,7 +412,7 @@ function App() {
     setShareStatus((previous) => ({ ...previous, isSaving: true, copied: false }));
 
     try {
-      const { id } = await saveSharedPlan({ profile, itinerary, routesByDay }, currentShareId);
+      const { id } = await saveSharedPlan({ profile, itinerary }, currentShareId);
       
       if (!currentShareId) {
         setCurrentShareId(id);
@@ -436,7 +442,6 @@ function App() {
       ...previous,
       [day]: [...(previous[day] || []), slot],
     }));
-    clearDayRoute(day);
     setShareStatus((previous) => ({ ...previous, url: '', copied: false }));
   };
 
@@ -457,7 +462,6 @@ function App() {
       }
       return { ...previous, [day]: slots.filter((_, index) => index !== indexToRemove) };
     });
-    clearDayRoute(day);
     setShareStatus((previous) => ({ ...previous, url: '', copied: false }));
   };
 
@@ -468,7 +472,6 @@ function App() {
         slot.id === slotId ? { ...slot, selectedIndex: nextIndex } : slot
       )),
     }));
-    clearDayRoute(day);
     setShareStatus((previous) => ({ ...previous, url: '', copied: false }));
   };
 
@@ -493,7 +496,6 @@ function App() {
 
       return { ...previous, [day]: nextSlots };
     });
-    clearDayRoute(day);
     setShareStatus((previous) => ({ ...previous, url: '', copied: false }));
   };
 
@@ -506,38 +508,14 @@ function App() {
       places.splice(toIndex, 0, movedPlace);
       return { ...previous, [day]: places };
     });
-    clearDayRoute(day);
     setShareStatus((previous) => ({ ...previous, url: '', copied: false }));
-  };
-
-  const handleOptimizeRoute = async (day, selectedPlaces) => {
-    const places = selectedPlaces;
-    if (places.length < 2) return alert('경로를 만들 장소를 2개 이상 선택해주세요.');
-    if (places.some((place) => !Number.isFinite(place.lat) || !Number.isFinite(place.lng))) return alert('장소 좌표를 확인할 수 없어요.');
-
-    try {
-      const routeData = await fetchTransitDirections(places);
-      const optimizedPlaces = routeData.places || places;
-      setRoutesByDay((previous) => ({
-        ...previous,
-        [day]: { places: optimizedPlaces, routeData },
-      }));
-    } catch (error) {
-      const data = error.response?.data;
-      const details = data?.details;
-      const message = data?.error
-        || (typeof details === 'string' ? details : details?.message || details?.error?.message);
-      alert(message || '경로 탐색에 실패했어요.');
-    }
   };
 
   if (shareId) return <SharePlanPage shareId={shareId} />;
   if (!profile) return <SignupScreen onCreateTrip={handleCreateTrip} />;
 
   const activeDayKey = profile.days.some((day) => day.key === activeDay) ? activeDay : profile.days[0]?.key || '';
-  const activeDayRoute = routesByDay[activeDayKey];
-  const mapPlaces = activeDayRoute?.places || [];
-  const mapRouteData = activeDayRoute?.routeData || null;
+  const mapPlaces = (itinerary[activeDayKey] || []).map(slot => slot.options[slot.selectedIndex ?? 0] || slot.options[0]).filter(Boolean);
 
   return (
     <div className="app-shell">
@@ -552,13 +530,12 @@ function App() {
         onReorder={handleReorderPlaces}
         onMergeIntoSlot={handleMergeIntoSlot}
         onSelectOption={handleSelectOption}
-        onOptimize={handleOptimizeRoute}
         onResetTrip={handleResetTrip}
         onSharePlan={handleSharePlan}
         shareStatus={shareStatus}
       />
       <div className="map-pane">
-        <MapViewer places={mapPlaces} routeData={mapRouteData} fitToPlaces />
+        <MapViewer places={mapPlaces} fitToPlaces />
       </div>
     </div>
   );

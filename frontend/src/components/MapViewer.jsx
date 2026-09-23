@@ -1,20 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { resolveApiUrl } from '../api/config';
 
-const MapViewer = ({ places, routeData, fitToPlaces = false }) => {
+const MapViewer = ({ places, fitToPlaces = false }) => {
   const mapElement = useRef(null);
   const mapInstance = useRef(null);
-  const polylineInstances = useRef([]);
   const markers = useRef([]);
   const infoWindow = useRef(null);
   const selectedMarker = useRef(null);
-  // 지도 인스턴스가 막 생성된 직후엔 내부 좌표 투영이 아직 자리를 잡지
-  // 않은 상태라, 그 타이밍에 바로 마커/경로를 그리면 좌표가 어긋나 화면에
-  // 나타나지 않을 수 있다. 메인 화면은 지도가 미리 떠 있는 상태로 오래
-  // 유지되다가 나중에 경로가 채워지니 우연히 안전했지만, 공유 페이지는
-  // fetch가 끝난 뒤 지도 생성과 경로 표시가 같은 렌더 사이클에 몰려 있어서
-  // 이 타이밍 문제가 그대로 드러난다. 한 프레임을 기다린 뒤에야 그리기
-  // 시작하도록 별도 플래그로 명시적으로 막는다.
   const [isMapReady, setIsMapReady] = useState(false);
 
   const escapeHtml = (value) => String(value ?? '')
@@ -48,13 +40,6 @@ const MapViewer = ({ places, routeData, fitToPlaces = false }) => {
     }
   }, []);
 
-  // Keep the map's internal size in sync with its container.
-  // On mobile the map-pane's actual pixel size can change after the map is
-  // first created (address bar show/hide, bottom sheet drag, orientation
-  // change). Without telling Naver Maps to resize, it keeps using its old
-  // size internally — markers still look roughly right, but routes drawn
-  // with Polyline are positioned against the stale projection and don't
-  // show up at all.
   useEffect(() => {
     const container = mapElement.current;
     if (!container || !window.naver?.maps) return undefined;
@@ -77,8 +62,6 @@ const MapViewer = ({ places, routeData, fitToPlaces = false }) => {
   useEffect(() => {
     if (!mapInstance.current || !window.naver || !isMapReady) return;
 
-    polylineInstances.current.forEach(polyline => polyline.setMap(null));
-    polylineInstances.current = [];
     if (infoWindow.current) infoWindow.current.close();
     selectedMarker.current = null;
     markers.current.forEach(marker => marker.setMap(null));
@@ -157,13 +140,9 @@ const MapViewer = ({ places, routeData, fitToPlaces = false }) => {
         markers.current.push(marker);
       });
 
-      const routePoints = routeData?.provider === 'google-transit'
-        ? routeData.legs.flatMap(leg => leg.paths || []).flat()
-        : [];
-
-      if (fitToPlaces && (places.length > 1 || routePoints.length > 0)) {
-        const lats = [...places.map((place) => place.lat), ...routePoints.map((point) => point.lat)];
-        const lngs = [...places.map((place) => place.lng), ...routePoints.map((point) => point.lng)];
+      if (fitToPlaces && places.length > 1) {
+        const lats = places.map((place) => place.lat);
+        const lngs = places.map((place) => place.lng);
         const bounds = new window.naver.maps.LatLngBounds(
           new window.naver.maps.LatLng(Math.min(...lats), Math.min(...lngs)),
           new window.naver.maps.LatLng(Math.max(...lats), Math.max(...lngs)),
@@ -174,31 +153,7 @@ const MapViewer = ({ places, routeData, fitToPlaces = false }) => {
         if (fitToPlaces) mapInstance.current.setZoom(15);
       }
     }
-
-    if (routeData?.provider === 'google-transit') {
-      // 지도가 처음 생성된 직후처럼 컨테이너가 아직 최종 크기를 반영하지
-      // 못한 상태에서 Polyline을 그리면, 마커는 보여도 선의 좌표 투영이
-      // 어긋나 화면에 나타나지 않는 경우가 있다. 그려주기 직전에 한 번
-      // 리사이즈를 강제로 알려서 최신 컨테이너 크기로 다시 계산하게 한다.
-      window.naver.maps.Event.trigger(mapInstance.current, 'resize');
-
-      routeData.legs.forEach(leg => {
-        // 길찾기 결과가 없어 직선으로 대체한 구간(mode: 'STRAIGHT')은 점선으로 구분한다.
-        const isStraight = leg.mode === 'STRAIGHT';
-        (leg.paths || []).forEach(path => {
-          const polyline = new window.naver.maps.Polyline({
-            path: path.map(point => new window.naver.maps.LatLng(point.lat, point.lng)),
-            strokeColor: isStraight ? '#6b7280' : '#2563eb',
-            strokeStyle: isStraight ? 'shortdash' : 'solid',
-            strokeOpacity: 0.8,
-            strokeWeight: isStraight ? 4 : 5,
-            map: mapInstance.current,
-          });
-          polylineInstances.current.push(polyline);
-        });
-      });
-    }
-  }, [places, routeData, fitToPlaces, isMapReady]);
+  }, [places, fitToPlaces, isMapReady]);
 
   return <div ref={mapElement} style={{ width: '100%', height: '100%' }} />;
 };
