@@ -772,11 +772,13 @@ button:disabled {
   display: flex;
   gap: 12px;
   align-items: flex-start;
-  padding: 16px 16px 36px 16px; /* 아래 여백을 36px로 늘림 */
+  padding: 16px; /* 이 부분을 수정해서 하단 빈 공간을 없앴습니다 */
   border: 1px solid #e6ebf2;
   border-radius: 12px;
   background: #ffffff;
-  position: relative; /* 네이버 지도 버튼을 절대 위치로 넣기 위해 필수 */
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
 }
 
 .share-place-card img {
@@ -788,42 +790,54 @@ button:disabled {
   flex-shrink: 0;
 }
 
-/* 텍스트 세로 찌그러짐 방지용 래퍼 */
+/* 카드 내부 정보 영역 제한 */
 .share-place-info {
   flex: 1;
-  min-width: 0; 
+  min-width: 0; /* 중요: Flex 자식 요소가 말줄임표(...)를 인식하도록 너비 한계 설정 */
+  padding-right: 28px; /* 우측 더보기 버튼 자리 확보 */
 }
 
-/* 뱃지가 있을 때 글자가 뱃지 아래로 들어가지 않도록 우측 여백 확보 */
-.share-place-info.has-badge {
-  padding-right: 36px;
+/* 장소 이름 및 A/B안 뱃지 래퍼 */
+.share-place-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  min-width: 0; /* title 영역 제한 */
 }
 
-.share-place-info strong,
+/* 장소 이름 말줄임표(...) 처리 */
+.share-place-title-wrap strong {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #172033;
+  font-size: 15px;
+}
+
+/* 주소 및 카테고리 텍스트 말줄임표(...) 공통 처리 */
 .share-place-info span,
 .share-place-info em {
   display: block;
+  width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.share-place-info strong {
-  color: #172033;
-  font-size: 15px;
-}
-
 .share-place-info span {
-  margin-top: 4px;
+  margin-top: 2px;
   color: #64748b;
   font-size: 13px;
 }
 
 .share-place-info em {
-  margin-top: 6px;
+  margin-top: 2px;
+  font-style: normal;
   color: #94a3b8;
   font-size: 12px;
-  font-style: normal;
 }
 
 /* 카드 우측 상단 A안, B안 뱃지 */
@@ -1346,4 +1360,47 @@ button:disabled {
 @keyframes slideUp {
   from { transform: translateY(100%); }
   to { transform: translateY(0); }
+}
+
+.inline-option-badge {
+  flex-shrink: 0;
+  background: #e9f2ff;
+  color: #2563eb;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 6px;
+  border-radius: 6px;
+  line-height: 1;
+}
+
+
+.more-options-btn {
+  position: absolute;
+  top: 12px;
+  right: 8px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 18px;
+  font-weight: bold;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.more-options-btn:active {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+/* 4. 기존 구형 배지와 네이버 지도 버튼은 화면에서 숨김 */
+.option-badge,
+.naver-map-link {
+  display: none !important;
 }

@@ -194,10 +194,7 @@ function ShareSlotRow({
   rowRef,
 }) {
   const carouselRef = useRef(null);
-  const [showMenu, setShowMenu] = useState(false); // 💡 액션 시트 메뉴 상태 추가
-  
-  const timerRef = useRef(null);
-  const isLongPress = useRef(false);
+  const [showMenu, setShowMenu] = useState(false);
 
   const currentPlace = slot.options[selectedIdx] || slot.options[0];
 
@@ -211,22 +208,7 @@ function ShareSlotRow({
     }
   }, [selectedIdx]);
 
-  // 💡 0.5초 꾹 누르기 감지 로직 추가
-  const handleTouchStart = () => {
-    isLongPress.current = false;
-    timerRef.current = setTimeout(() => {
-      isLongPress.current = true;
-      if (navigator.vibrate) navigator.vibrate(40);
-      setShowMenu(true); // 0.5초 뒤 메뉴 열기
-    }, 500);
-  };
-
-  const handleTouchEnd = () => {
-    if (timerRef.current) clearTimeout(timerRef.current);
-  };
-
   const handleCardClick = (place) => {
-    if (isLongPress.current) return; // 꾹 누른 거면 단순 클릭 이벤트(지도 이동) 무시
     if (onCardClick) onCardClick(place);
   };
 
@@ -250,33 +232,41 @@ function ShareSlotRow({
               <div key={`${place.lat}-${place.lng}-${optIdx}`} className="share-slot-option">
                 <div
                   className="share-place-card"
-                  // 💡 카드에 터치 및 클릭 이벤트 연결
-                  onTouchStart={handleTouchStart}
-                  onTouchEnd={handleTouchEnd}
-                  onTouchMove={handleTouchEnd}
-                  onMouseDown={handleTouchStart}
-                  onMouseUp={handleTouchEnd}
-                  onContextMenu={(e) => e.preventDefault()} // 모바일에서 꾹 누를 때 기본 메뉴 뜨는 것 방지
                   onClick={() => handleCardClick(place)}
                 >
                   {place.photoUrl && (
                     <img src={resolveApiUrl(place.photoUrl)} alt="" loading="lazy" />
                   )}
-                  <div className={`share-place-info ${slot.options.length > 1 ? 'has-badge' : ''}`}>
-                    <strong>
-                      {!isVisited && `${index + 1}. `}{place.title}
-                    </strong>
+                  <div className="share-place-info">
+                    {/* ★ 장소 이름과 A/B안 배지를 나란히 배치 */}
+                    <div className="share-place-title-wrap">
+                      <strong>
+                        {!isVisited && `${index + 1}. `}{place.title}
+                      </strong>
+                      {slot.options.length > 1 && (
+                        <span className="inline-option-badge">
+                          {String.fromCharCode(65 + optIdx)}안
+                        </span>
+                      )}
+                    </div>
                     <span>{place.roadAddress || place.address || '주소 정보 없음'}</span>
                     {(place.primaryType || place.placeType) && (
                       <em>{place.primaryType || place.placeType}</em>
                     )}
                   </div>
 
-                  {slot.options.length > 1 && (
-                    <span className="option-badge">
-                      {String.fromCharCode(65 + optIdx)}안
-                    </span>
-                  )}
+                  {/* ★ 우측 상단 더보기(점 3개) 버튼 */}
+                  <button
+                    type="button"
+                    className="more-options-btn"
+                    onClick={(e) => {
+                      e.stopPropagation(); // 카드 클릭(지도 이동) 방지
+                      setShowMenu(true);
+                    }}
+                    aria-label="더보기 메뉴 열기"
+                  >
+                    ⋮
+                  </button>
                 </div>
               </div>
             ))}
@@ -295,7 +285,7 @@ function ShareSlotRow({
         </div>
       </div>
 
-      {/* 💡 액션 시트 (중간 메뉴) UI 추가 */}
+      {/* ★ 하단 더보기 메뉴 (액션 시트) */}
       {showMenu && (
         <div className="action-sheet-backdrop" onClick={() => setShowMenu(false)}>
           <div className="action-sheet" onClick={(e) => e.stopPropagation()}>
