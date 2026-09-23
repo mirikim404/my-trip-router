@@ -37,6 +37,21 @@ const isFinitePlace = (place) => (
   && Number.isFinite(place.lat) && Number.isFinite(place.lng)
 );
 
+const isValidSlot = (slot) => (
+  slot && typeof slot === 'object'
+  && typeof slot.id === 'string' && slot.id
+  && Array.isArray(slot.options) && slot.options.length > 0
+  && slot.options.every(isFinitePlace)
+);
+
+const sanitizeSlot = ({ id, options, selectedIndex }) => ({
+  id,
+  options,
+  selectedIndex: Number.isInteger(selectedIndex) && selectedIndex >= 0 && selectedIndex < options.length
+    ? selectedIndex
+    : 0,
+});
+
 // Google Directions 결과를 그대로 신뢰하지 않고, 지도에 그리는 데 필요한
 // 형태(좌표 배열로 이루어진 legs.paths)로 좁혀서 저장한다.
 const sanitizeRouteData = (routeData) => {
@@ -80,16 +95,16 @@ const sanitizePlan = ({ profile, itinerary, routesByDay } = {}) => {
     : {};
 
   for (const day of days) {
-    const places = itinerary[day.key] ?? [];
-    const isValid = Array.isArray(places)
-      && places.length <= MAX_PLACES_PER_DAY
-      && places.every(isFinitePlace);
+    const slots = itinerary[day.key] ?? [];
+    const isValid = Array.isArray(slots)
+      && slots.length <= MAX_PLACES_PER_DAY
+      && slots.every(isValidSlot);
     if (!isValid) return null;
-    cleanItinerary[day.key] = places;
+    cleanItinerary[day.key] = slots.map(sanitizeSlot);
 
     const cleanRoute = sanitizeRouteData(safeRoutesByDay[day.key]);
     if (cleanRoute) cleanRoutesByDay[day.key] = cleanRoute;
-  }
+}
 
   return {
     profile: {
