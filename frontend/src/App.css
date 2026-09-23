@@ -772,14 +772,17 @@ button:disabled {
   display: flex;
   gap: 12px;
   align-items: flex-start;
-  padding: 16px; 
+  padding: 16px;
   border: 1px solid #e6ebf2;
   border-radius: 12px;
   background: #ffffff;
   position: relative;
-  box-sizing: border-box;
+  
+  /* ▼ 텍스트 밀림 방지를 위해 추가된 핵심 코드 */
   width: 100%;
-  min-width: 0; /* 카드 강제 팽창 방지 */
+  min-width: 0; 
+  box-sizing: border-box;
+  overflow: hidden; 
 }
 
 /* 사진 및 사진 위 오버레이 뱃지 래퍼 */
@@ -820,9 +823,11 @@ button:disabled {
   display: flex;
   flex-direction: column;
   flex: 1;
-  min-width: 0; /* 줄임표 인식용 */
-  overflow: hidden;
-  padding-right: 24px;
+  padding-right: 28px; /* 우측 더보기(⋮) 버튼 겹침 방지 */
+  
+  /* ▼ 부모 요소가 텍스트 길이에 맞춰 무한 팽창하는 것을 차단 */
+  min-width: 0; 
+  width: 100%;
 }
 
 .share-place-info strong,
@@ -830,23 +835,23 @@ button:disabled {
 .share-place-info em {
   display: block;
   width: 100%;
-  max-width: 100%;
+  
+  /* ▼ 말줄임표(...) 적용 필수 코드 */
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+/* 아래는 기존 색상/폰트 크기 유지 */
 .share-place-info strong {
   color: #172033;
   font-size: 15px;
   margin-bottom: 2px;
 }
-
 .share-place-info span {
   color: #64748b;
   font-size: 13px;
 }
-
 .share-place-info em {
   color: #94a3b8;
   font-size: 12px;
@@ -1386,4 +1391,15 @@ button:disabled {
 .more-options-btn:active {
   background: #f1f5f9;
   color: #475569;
+}
+
+/* ========================================================= */
+/* 카드 늘어남 강제 방지 (Flex 자식 요소 min-width: 0 강제) */
+/* ========================================================= */
+.share-slot-item,
+.share-card-wrapper,
+.share-slot-carousel,
+.share-slot-option {
+  width: 100%;
+  min-width: 0 !important;
 }

@@ -225,6 +225,8 @@ function ShareSlotRow({
               const newIndex = Math.round(e.target.scrollLeft / width);
               if (newIndex !== selectedIdx && newIndex >= 0 && newIndex < slot.options.length) {
                 onSelect(newIndex);
+                // ★ 슬라이드가 넘어갈 때 해당 장소로 지도 포커스 자동 이동
+                if (onCardClick) onCardClick(slot.options[newIndex]);
               }
             }}
           >
