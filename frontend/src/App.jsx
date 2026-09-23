@@ -219,7 +219,7 @@ function ShareSlotRow({
     if (!isSwiping.current) return;
     touchCurrentX.current = e.touches[0].clientX;
     const diffX = touchCurrentX.current - touchStartX.current;
-    
+
     // 왼쪽으로 스와이프할 때만 (최대 -80px)
     if (diffX < 0) {
       setSwipeOffset(Math.max(diffX, -80));
@@ -281,7 +281,7 @@ function ShareSlotRow({
                       <em>{place.primaryType || place.placeType}</em>
                     )}
                   </div>
-                  
+
                   {slot.options.length > 1 && (
                     <span className="option-badge">
                       {String.fromCharCode(65 + optIdx)}안
@@ -308,9 +308,9 @@ function ShareSlotRow({
           {slot.options.length > 1 && (
             <div className="share-slot-dots">
               {slot.options.map((_, dotIdx) => (
-                <span 
-                  key={dotIdx} 
-                  className={`share-slot-dot ${selectedIdx === dotIdx ? 'is-active' : ''}`} 
+                <span
+                  key={dotIdx}
+                  className={`share-slot-dot ${selectedIdx === dotIdx ? 'is-active' : ''}`}
                 />
               ))}
             </div>
@@ -406,7 +406,7 @@ function SharePlanPage({ shareId }) {
 
   const activeDay = days.find((day) => day.key === selectedDay) || days[0];
   const allSlots = activeDay ? itinerary[activeDay.key] || [] : [];
-  
+
   // 방문 안 한 장소 vs 방문 완료한 장소 분리
   const unvisitedSlots = allSlots.filter((slot) => !visitedSlots[slot.id]);
   const visitedSlotsList = allSlots.filter((slot) => visitedSlots[slot.id]);
@@ -434,11 +434,11 @@ function SharePlanPage({ shareId }) {
   return (
     <main className="share-shell">
       <div className="share-map-pane">
-        {/* 💡 [수정됨] 배열에 focusedPlace를 중복 추가하지 않고 그대로 mapPlaces만 전달 (마커 번호 오류 해결) */}
-        <MapViewer 
-          places={mapPlaces} 
-          focusedPlace={focusedPlace} /* MapViewer 내부에서 줌인용으로만 사용하도록 별도 prop으로 전달 */
-          fitToPlaces={!focusedPlace} 
+        <MapViewer
+          places={mapPlaces}
+          focusedPlace={focusedPlace}
+          fitToPlaces={!focusedPlace}
+          sheetHeight={sheetHeight} /* 💡 바텀시트의 현재 픽셀 높이를 지도에 전달 */
         />
       </div>
 
@@ -529,7 +529,7 @@ function SharePlanPage({ shareId }) {
 function App() {
   const shareId = getShareIdFromPath();
   const initialProfile = useMemo(() => loadJson(PROFILE_STORAGE_KEY), []);
-  
+
   const [profile, setProfile] = useState(initialProfile);
   const [itinerary, setItinerary] = useState(() => {
     const savedPlan = loadJson(PLAN_STORAGE_KEY);
@@ -537,10 +537,10 @@ function App() {
       ? createEmptyItinerary(initialProfile.days, savedPlan || {})
       : savedPlan || {};
   });
-  
+
   const [activeDay, setActiveDay] = useState(() => initialProfile?.days?.[0]?.key || '');
   const [shareStatus, setShareStatus] = useState({ isSaving: false, url: '', copied: false });
-  
+
   const [currentShareId, setCurrentShareId] = useState(() => localStorage.getItem('currentPlanId') || null);
 
   useEffect(() => {
@@ -562,7 +562,7 @@ function App() {
     setItinerary((previous) => createEmptyItinerary(days, previous));
     setActiveDay(days[0]?.key || '');
     setShareStatus({ isSaving: false, url: '', copied: false });
-    
+
     setCurrentShareId(null);
     localStorage.removeItem('currentPlanId');
   };
@@ -573,7 +573,7 @@ function App() {
 
     setProfile(null);
     setShareStatus({ isSaving: false, url: '', copied: false });
-    
+
     setCurrentShareId(null);
     localStorage.removeItem('currentPlanId');
   };
@@ -584,7 +584,7 @@ function App() {
 
     try {
       const { id } = await saveSharedPlan({ profile, itinerary }, currentShareId);
-      
+
       if (!currentShareId) {
         setCurrentShareId(id);
         localStorage.setItem('currentPlanId', id);

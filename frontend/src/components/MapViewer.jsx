@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { resolveApiUrl } from '../api/config';
 
-// 💡 focusedPlace prop 추가
-const MapViewer = ({ places, focusedPlace, fitToPlaces = false }) => {
+// 💡 sheetHeight prop 추가
+const MapViewer = ({ places, focusedPlace, fitToPlaces = false, sheetHeight = 0 }) => {
   const mapElement = useRef(null);
   const mapInstance = useRef(null);
   const markers = useRef([]);
@@ -156,18 +156,43 @@ const MapViewer = ({ places, focusedPlace, fitToPlaces = false }) => {
     }
   }, [places, fitToPlaces, isMapReady]);
 
-  // 💡 추가된 부분: focusedPlace(클릭한 장소)가 변경될 때 지도를 해당 위치로 이동 및 줌인
+  // 💡 포커싱 보정 로직 적용
   useEffect(() => {
     if (!mapInstance.current || !window.naver || !isMapReady || !focusedPlace) return;
 
-    const latLng = new window.naver.maps.LatLng(focusedPlace.lat, focusedPlace.lng);
+    const targetLatLng = new window.naver.maps.LatLng(focusedPlace.lat, focusedPlace.lng);
     
-    // 부드럽게 위치 이동 (panTo)
-    mapInstance.current.panTo(latLng);
-    
-    // 포커스 된 장소를 자세히 볼 수 있도록 약간 줌인 (기호에 맞게 숫자 조절 가능)
-    mapInstance.current.setZoom(15, true); 
-  }, [focusedPlace, isMapReady]);
+    // 1. 줌 레벨을 먼저 맞춥니다.
+    mapInstance.current.setZoom(15, true);
+
+    // 2. 현재 시트 높이를 가져옵니다. (없으면 화면 절반으로 간주)
+    const currentSheetHeight = sheetHeight || (window.innerHeight / 2);
+
+    // 3. 줌이 적용될 수 있도록 아주 짧은 딜레이 후 중심점 보정 이동 실행
+    setTimeout(() => {
+      if (!mapInstance.current) return;
+      
+      const proj = mapInstance.current.getProjection();
+      
+      // 타겟 마커의 화면상 현재 픽셀 위치를 계산합니다.
+      const targetOffset = proj.fromCoordToOffset(targetLatLng);
+      
+      // 마커를 바텀시트 밖(화면 위쪽)으로 밀어 올리기 위해,
+      // 새롭게 중심이 될 지점을 마커보다 더 남쪽(y값 증가 방향)으로 내립니다.
+      // 바텀시트가 가리는 높이의 절반 + 상단 여백(20px)만큼 내립니다.
+      targetOffset.y += (currentSheetHeight / 2) + 20;
+
+      // 계산된 새로운 픽셀 좌표를 다시 실제 위경도로 변환합니다.
+      const adjustedCenter = proj.fromOffsetToCoord(targetOffset);
+      
+      // 보정된 중심으로 부드럽게 지도를 이동합니다.
+      mapInstance.current.panTo(adjustedCenter);
+    }, 100);
+
+  }, [focusedPlace, isMapReady]); 
+  // 💡 주의: sheetHeight는 deps에 넣지 않습니다. 
+  // 바텀시트를 위아래로 '드래그할 때'마다 지도가 떨리면서 따라다니는 현상을 막고, 
+  // 목록을 '클릭한 시점'의 높이만을 기준으로 1회 계산하기 위함입니다.
 
   return <div ref={mapElement} style={{ width: '100%', height: '100%' }} />;
 };
