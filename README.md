@@ -11,7 +11,10 @@
 - **장소 검색**: 네이버 Local API를 활용한 목적지 검색 및 추가
 - **일정 관리**: Day 1, Day 2 등 일자별 장소 목록 관리 (로컬 스토리지 자동 저장)
 - **동선 최적화**: 인접 장소까지의 대중교통 소요시간을 구글 Routes API로 계산해, 매 단계 가장 빨리 갈 수 있는 다음 장소를 선택하는 방식(Greedy Nearest)으로 방문 순서를 정렬
-- **경로 시각화**: 구글 Routes API(대중교통)로 계산한 실제 경로를 네이버 지도 위에 표시
+- **경로 시각화**: 구간 거리에 따라 경로 소스를 나눠 네이버 지도 위에 표시
+  - 1.2km 이내: 네이버 Directions(자동차 도로 기준 실선, 도보 대용)
+  - 1.2km 초과: 구글 Routes API 대중교통(버스/지하철, 역까지 걷는 구간 포함)
+  - 한쪽이 실패하면 다른 쪽으로 폴백하고, 둘 다 안 되면 회색 점선 직선(정확한 경로 아님)으로 표시
 - **장소 상세정보**: 구글 Places API로 사진 · 전화번호 · 카테고리 등 부가 정보 연동
 - **일정 공유**: 공유 링크(`/share/<id>`)로 친구가 로그인 없이 모바일에서 일정과 지도를 읽기 전용으로 확인
 
@@ -19,9 +22,9 @@
 
 - **Frontend**: React(Vite), Axios
 - **Backend (API Proxy)**: Node.js, Express, CORS
-- **External API**: Naver Maps JavaScript API(지도 렌더링), Naver Local Search API(장소 검색), Google Routes API(대중교통 길찾기), Google Places API(장소 상세 · 사진)
+- **External API**: Naver Maps JavaScript API(지도 렌더링), Naver Local Search API(장소 검색), Naver Directions 5(도로 기준 길찾기), Google Routes API(대중교통 길찾기), Google Places API(장소 상세 · 사진)
 
-> ℹ️ 예전에는 네이버 Directions 15(도로 기준) API로 경로를 그렸지만, 현재는 대중교통 기준(Google Routes API)으로 전환되어 있어요. 관련 레거시 코드는 `backend/server.js`의 `/api/directions`와 `frontend/src/components/MapViewer.jsx`의 `traoptimal` 분기, `frontend/src/utils/tspAlgo.js`에 남아 있고 현재는 어디서도 호출/사용하지 않습니다.
+> ℹ️ 도보 전용 길찾기는 현재 API 조합으로 불가능해요. 네이버 Directions는 자동차 전용이고, Google Routes는 한국에서 도보(WALK)를 지원하지 않아요. 그래서 가까운 구간은 자동차 도로망을 따라가는 네이버 경로로 대신 그려요. (지도의 실선이 실제 보행로와 다를 수 있어요)
 
 ## 🚀 로컬 실행 방법
 
@@ -39,7 +42,8 @@ cp backend/.env.example backend/.env
 | --- | --- | --- |
 | `API_HUB_CLIENT_ID` / `API_HUB_CLIENT_SECRET` | 필수 | 네이버 API HUB 지역 검색 (`/api/search`) |
 | `GOOGLE_MAPS_API_KEY` | 필수 | 대중교통 길찾기, 장소 상세/사진 (`/api/transit`, `/api/place-details`, `/api/place-photo`) — Google Cloud Console에서 **Routes API**와 **Places API**를 모두 활성화한 키를 사용하세요 |
-| `NCP_MAP_CLIENT_ID` / `NCP_MAP_CLIENT_SECRET` | 선택(레거시) | `/api/directions`(현재 프론트엔드에서 호출하지 않는 도로 길찾기 프록시)용. 안 채워도 앱 동작에는 영향 없어요 |
+| `NCP_MAP_CLIENT_ID` / `NCP_MAP_CLIENT_SECRET` | 권장 | 도보권(1.2km 이내) 구간의 네이버 Directions 경로 (`/api/transit`). NCP 애플리케이션에서 **Directions 5**를 선택해 두세요. 비우면 네이버 경로를 건너뛰고 Google 대중교통 → 직선으로만 폴백해요 |
+| `NAVER_DIRECTIONS_URL` | 선택 | 기본값은 Directions 5 주소. Directions 15를 구독 중이면 `.../map-direction-15/v1/driving`으로 지정 |
 | `PORT` | 선택 | 백엔드 포트, 기본값 3001 |
 
 지도(`index.html`)에 쓰이는 네이버 지도 JS 키는 NCP 콘솔에서 발급받아 `frontend/index.html`의 `ncpKeyId` 값을 본인 키로 교체하세요.
@@ -77,7 +81,6 @@ node server.js
 
 ## ⚠️ 알려진 정리 대상 (Known Issues)
 
-- `backend/server.js`의 `/api/directions`와 `frontend/src/components/MapViewer.jsx`의 `traoptimal` 분기: 사용하지 않는 레거시 코드
 - `frontend/src/utils/tspAlgo.js`: 어디서도 import되지 않는 미사용 파일 (현재 최적화는 백엔드의 대중교통 소요시간 기준 로직이 담당)
 - CORS가 모든 오리진에 열려있음 (`app.use(cors())`) — 배포 시 도메인 제한 필요
 - `backend/data/plans.json`에 만료/정리 로직 없음 — 공유 링크가 계속 쌓임

@@ -258,29 +258,85 @@ const haversineDistanceMeters = (a, b) => {
   return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(h)));
 };
 
-const WALKABLE_DISTANCE_METERS = 1200; // 대략 도보 15분 이내
+const WALKABLE_DISTANCE_METERS = 1200; // 대략 도보 15분 이내. 이 안쪽은 네이버 driving, 바깥쪽은 Google TRANSIT 우선
 const WALK_SPEED_MPS = 1.25;           // 직선 폴백 구간의 소요시간 추정용
 const WALK_DETOUR_FACTOR = 1.3;        // 직선거리 → 실제 보행거리 보정
+const ROUTE_REQUEST_TIMEOUT_MS = 10000; // 한쪽 API가 멈춰도 다음 폴백으로 넘어갈 수 있게 한다
+const PATH_SIMPLIFY_TOLERANCE_METERS = 3;
 
-// Google Routes API 호출.
+// 네이버 Directions 5 (자동차 길찾기). Directions 15 를 구독 중이라면
+// NAVER_DIRECTIONS_URL 에 https://naveropenapi.apigw.ntruss.com/map-direction-15/v1/driving 을 지정한다.
+const NAVER_DIRECTIONS_URL = process.env.NAVER_DIRECTIONS_URL
+  || 'https://naveropenapi.apigw.ntruss.com/map-direction/v1/driving';
+const isNaverDirectionsConfigured = Boolean(NCP_MAP_CLIENT_ID && NCP_MAP_CLIENT_SECRET);
+if (!isNaverDirectionsConfigured) {
+  console.warn('NCP_MAP_CLIENT_ID / NCP_MAP_CLIENT_SECRET 이 없어 네이버 driving 경로를 건너뛰어요. (Google 대중교통 → 직선 순으로만 시도)');
+}
+
+const roundCoordinate = (value) => Math.round(value * 1e5) / 1e5;
+
+// Douglas-Peucker 로 좌표 수를 줄인다(반복형이라 긴 경로에서도 안전).
+// 네이버 driving 은 장거리 폴백일 때 형상점이 수천 개가 될 수 있어서,
+// 그대로 두면 일정 공유 저장(express.json 1mb 제한)에서 걸릴 수 있다.
+const simplifyPath = (points, toleranceMeters) => {
+  if (points.length <= 2) return points;
+
+  const refLatRad = toRadians(points[0].lat);
+  const xs = points.map((point) => toRadians(point.lng) * Math.cos(refLatRad) * EARTH_RADIUS_M);
+  const ys = points.map((point) => toRadians(point.lat) * EARTH_RADIUS_M);
+  const keep = new Uint8Array(points.length);
+  keep[0] = 1;
+  keep[points.length - 1] = 1;
+
+  const stack = [[0, points.length - 1]];
+  while (stack.length > 0) {
+    const [first, last] = stack.pop();
+    const dx = xs[last] - xs[first];
+    const dy = ys[last] - ys[first];
+    const lengthSq = dx * dx + dy * dy;
+
+    let maxDistance = 0;
+    let maxIndex = -1;
+    for (let i = first + 1; i < last; i += 1) {
+      const t = lengthSq === 0
+        ? 0
+        : Math.max(0, Math.min(1, ((xs[i] - xs[first]) * dx + (ys[i] - ys[first]) * dy) / lengthSq));
+      const distance = Math.hypot(xs[i] - (xs[first] + t * dx), ys[i] - (ys[first] + t * dy));
+      if (distance > maxDistance) {
+        maxDistance = distance;
+        maxIndex = i;
+      }
+    }
+
+    if (maxIndex !== -1 && maxDistance > toleranceMeters) {
+      keep[maxIndex] = 1;
+      stack.push([first, maxIndex], [maxIndex, last]);
+    }
+  }
+
+  return points.filter((_, index) => keep[index] === 1);
+};
+
+// ---------- Google Routes (대중교통) ----------
 // - 경로가 없으면(빈 응답) null 을 돌려준다.
-// - HTTP 에러(키/권한/쿼터 문제 등)는 그대로 throw 한다.
-const computeGoogleRoute = async (origin, destination, travelMode) => {
+// - HTTP 에러(키/권한/쿼터 문제 등)는 throw 한다. (호출하는 쪽에서 폴백 처리)
+// 한국은 Google 도보(WALK) 길찾기를 지원하지 않아 대중교통만 쓴다.
+// 대중교통 응답의 steps 에는 역까지 걷는 도보 구간도 함께 들어 있다.
+const computeGoogleTransitRoute = async (origin, destination) => {
   const response = await axios.post('https://routes.googleapis.com/directions/v2:computeRoutes', {
     origin: { location: { latLng: { latitude: origin.lat, longitude: origin.lng } } },
     destination: { location: { latLng: { latitude: destination.lat, longitude: destination.lng } } },
-    travelMode,
-    ...(travelMode === 'TRANSIT' ? {
-      transitPreferences: {
-        routingPreference: 'FEWER_TRANSFERS',
-        allowedTravelModes: ['BUS', 'SUBWAY']
-      }
-    } : {})
+    travelMode: 'TRANSIT',
+    transitPreferences: {
+      routingPreference: 'FEWER_TRANSFERS',
+      allowedTravelModes: ['BUS', 'SUBWAY']
+    }
   }, {
     headers: {
       'X-Goog-Api-Key': GOOGLE_MAPS_API_KEY,
       'X-Goog-FieldMask': 'routes.duration,routes.localizedValues,routes.legs.steps.polyline,routes.legs.steps.transitDetails'
-    }
+    },
+    timeout: ROUTE_REQUEST_TIMEOUT_MS
   });
 
   return response.data.routes?.[0] || null;
@@ -290,10 +346,10 @@ const googleErrorMessage = (error) => (
   error.response?.data?.error?.message || error.message
 );
 
-const formatTransitLeg = (origin, destination, route, mode) => ({
+const formatTransitLeg = (origin, destination, route) => ({
   from: origin.title,
   to: destination.title,
-  mode,
+  mode: 'TRANSIT',
   duration: route.duration,
   localizedValues: route.localizedValues,
   paths: (route.legs?.flatMap(leg => leg.steps || []) || [])
@@ -303,9 +359,67 @@ const formatTransitLeg = (origin, destination, route, mode) => ({
   steps: route.legs?.flatMap(leg => leg.steps || []) || []
 });
 
-// Google이 경로를 주지 못하는 구간(한국은 도보 길찾기 미지원, 심야 대중교통 없음 등)에서도
-// 전체 경로 만들기가 실패하지 않도록, 두 장소를 잇는 직선 구간으로 대신한다.
-// mode: 'STRAIGHT' 는 프론트에서 점선으로 그려 실제 길이 아님을 구분한다.
+// ---------- 네이버 Directions (자동차 길찾기) ----------
+// - 경로가 없으면(HTTP 200 + code !== 0: 출발/도착 동일, 도로 주변 아님 등) null 을 돌려준다.
+// - HTTP 에러(인증/쿼터 등)는 throw 한다. (호출하는 쪽에서 폴백 처리)
+const computeNaverDrivingRoute = async (origin, destination) => {
+  const response = await axios.get(NAVER_DIRECTIONS_URL, {
+    params: {
+      start: `${origin.lng},${origin.lat}`, // 네이버는 (경도,위도) 순서
+      goal: `${destination.lng},${destination.lat}`,
+      option: 'traoptimal'
+    },
+    headers: {
+      'X-NCP-APIGW-API-KEY-ID': NCP_MAP_CLIENT_ID,
+      'X-NCP-APIGW-API-KEY': NCP_MAP_CLIENT_SECRET,
+    },
+    timeout: ROUTE_REQUEST_TIMEOUT_MS
+  });
+
+  const { code, message, route } = response.data || {};
+  if (code !== 0) {
+    console.warn(`네이버 driving 경로 없음 (code ${code}): ${message || ''}`);
+    return null;
+  }
+  return route?.traoptimal?.[0] || null;
+};
+
+const naverErrorMessage = (error) => {
+  const status = error.response?.status;
+  const message = error.response?.data?.error?.message || error.message;
+  return status ? `${status} ${message}` : message;
+};
+
+const formatNaverLeg = (origin, destination, route) => {
+  const roadPoints = (route.path || [])
+    .filter((point) => Array.isArray(point) && Number.isFinite(point[0]) && Number.isFinite(point[1]))
+    .map(([lng, lat]) => ({ lat, lng }));
+  if (roadPoints.length === 0) return null;
+
+  // 네이버는 출발/도착 좌표를 가까운 도로 위로 옮겨서 계산하므로, 실제 장소 마커까지
+  // 선이 이어지도록 양 끝에 장소 좌표를 붙인다. (도로에서 마커까지 짧은 구간)
+  const path = simplifyPath([
+    { lat: origin.lat, lng: origin.lng },
+    ...roadPoints,
+    { lat: destination.lat, lng: destination.lng }
+  ], PATH_SIMPLIFY_TOLERANCE_METERS)
+    .map((point) => ({ lat: roundCoordinate(point.lat), lng: roundCoordinate(point.lng) }));
+
+  return {
+    from: origin.title,
+    to: destination.title,
+    mode: 'DRIVING',
+    duration: `${Math.round((route.summary?.duration ?? 0) / 1000)}s`, // 자동차 기준 소요시간
+    distanceMeters: route.summary?.distance ?? null,
+    localizedValues: null,
+    paths: [path],
+    steps: []
+  };
+};
+
+// ---------- 직선(최후의 수단) ----------
+// 두 장소를 잇는 직선 구간. mode: 'STRAIGHT' 는 프론트에서 회색 점선으로 그려
+// 실제 길이 아님을 구분한다.
 const buildStraightLeg = (origin, destination) => {
   const meters = haversineDistanceMeters(origin, destination);
   const seconds = Math.round((meters * WALK_DETOUR_FACTOR) / WALK_SPEED_MPS);
@@ -323,32 +437,51 @@ const buildStraightLeg = (origin, destination) => {
   };
 };
 
+// 각 시도는 성공하면 leg, 경로가 없거나 API 오류면 null 을 돌려준다.
+// (오류는 서버 로그에 남기고, 호출하는 쪽에서 다음 수단으로 넘어간다)
+const tryNaverDriving = async (origin, destination) => {
+  if (!isNaverDirectionsConfigured) return null;
+  try {
+    const route = await computeNaverDrivingRoute(origin, destination);
+    return route ? formatNaverLeg(origin, destination, route) : null;
+  } catch (error) {
+    console.warn(`네이버 driving 경로 실패 (${origin.title} -> ${destination.title}):`, naverErrorMessage(error));
+    return null;
+  }
+};
+
+const tryGoogleTransit = async (origin, destination) => {
+  try {
+    const route = await computeGoogleTransitRoute(origin, destination);
+    const leg = route && formatTransitLeg(origin, destination, route);
+    return leg && leg.paths.length > 0 ? leg : null;
+  } catch (error) {
+    console.warn(`Google 대중교통 경로 실패 (${origin.title} -> ${destination.title}):`, googleErrorMessage(error));
+    return null;
+  }
+};
+
+// 구간별 경로 선택:
+//   거리 <= 1.2km : 네이버 driving(도보 대용) → Google TRANSIT → 직선
+//   거리 >  1.2km : Google TRANSIT → 네이버 driving → 직선
 const buildLeg = async (origin, destination) => {
   const isWalkable = haversineDistanceMeters(origin, destination) <= WALKABLE_DISTANCE_METERS;
+  const attempts = isWalkable
+    ? [tryNaverDriving, tryGoogleTransit]
+    : [tryGoogleTransit, tryNaverDriving];
 
-  if (isWalkable) {
-    // 가까운 구간은 도보를 먼저 시도한다. 다만 Google은 한국에서 도보 길찾기를
-    // 제공하지 않아 빈 응답/에러가 오므로, 실패하면 직선 구간으로 대신한다.
-    try {
-      const route = await computeGoogleRoute(origin, destination, 'WALK');
-      const leg = route && formatTransitLeg(origin, destination, route, 'WALK');
-      if (leg && leg.paths.length > 0) return leg;
-    } catch (error) {
-      console.warn(`도보 경로 없음 (${origin.title} -> ${destination.title}):`, googleErrorMessage(error));
-    }
-    return buildStraightLeg(origin, destination);
+  for (const attempt of attempts) {
+    const leg = await attempt(origin, destination);
+    if (leg) return leg;
   }
 
-  // 먼 구간은 대중교통. HTTP 에러(키/권한 문제)는 숨기지 않고 그대로 올려보낸다.
-  const route = await computeGoogleRoute(origin, destination, 'TRANSIT');
-  const leg = route && formatTransitLeg(origin, destination, route, 'TRANSIT');
-  if (leg && leg.paths.length > 0) return leg;
-
-  console.warn(`대중교통 경로 없음 (${origin.title} -> ${destination.title}) - 직선 구간으로 대체`);
+  console.warn(`경로를 찾지 못해 직선 구간으로 대체 (${origin.title} -> ${destination.title})`);
   return buildStraightLeg(origin, destination);
 };
 
 // 사용자가 정한 방문 순서 그대로 구간별 경로를 만든다.
+// provider 값은 저장된 공유 일정과의 호환을 위해 'google-transit' 을 그대로 쓴다.
+// (실제 구간별 수단은 leg.mode: TRANSIT / DRIVING / STRAIGHT)
 app.post('/api/transit', async (req, res) => {
   try {
     const { places } = req.body;
@@ -367,8 +500,8 @@ app.post('/api/transit', async (req, res) => {
 
     res.json({ provider: 'google-transit', places, legs });
   } catch (error) {
-    console.error('대중교통 API 에러:', error.response?.data || error.message);
-    res.status(502).json({ error: `Google 경로 API 호출에 실패했어요: ${googleErrorMessage(error)}` });
+    console.error('경로 API 에러:', error.response?.data || error.message);
+    res.status(500).json({ error: `경로를 계산하지 못했어요: ${error.message}` });
   }
 });
 
