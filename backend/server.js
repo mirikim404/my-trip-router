@@ -37,6 +37,8 @@ const isFinitePlace = (place) => (
   && Number.isFinite(place.lat) && Number.isFinite(place.lng)
 );
 
+// itinerary[day]의 각 항목은 프론트와 마찬가지로 "슬롯"
+// { id, options: [place, ...], selectedIndex } 형태다.
 const isValidSlot = (slot) => (
   slot && typeof slot === 'object'
   && typeof slot.id === 'string' && slot.id
@@ -102,9 +104,17 @@ const sanitizePlan = ({ profile, itinerary, routesByDay } = {}) => {
     if (!isValid) return null;
     cleanItinerary[day.key] = slots.map(sanitizeSlot);
 
-    const cleanRoute = sanitizeRouteData(safeRoutesByDay[day.key]);
-    if (cleanRoute) cleanRoutesByDay[day.key] = cleanRoute;
-}
+    // routesByDay[day.key]는 프론트에서 { places, routeData } 형태로 저장되고,
+    // 실제 경로 정보(provider/legs)는 그 안의 routeData에 있다.
+    const dayRoute = safeRoutesByDay[day.key];
+    const cleanRouteData = sanitizeRouteData(dayRoute?.routeData);
+    if (cleanRouteData) {
+      const dayRoutePlaces = Array.isArray(dayRoute.places) && dayRoute.places.every(isFinitePlace)
+        ? dayRoute.places
+        : cleanRouteData.places;
+      cleanRoutesByDay[day.key] = { places: dayRoutePlaces, routeData: cleanRouteData };
+    }
+  }
 
   return {
     profile: {
@@ -236,15 +246,37 @@ app.get('/api/search', async (req, res) => {
   }
 });
 
+const EARTH_RADIUS_M = 6371000;
+const toRadians = (deg) => (deg * Math.PI) / 180;
+
+// 직선거리 기준으로 "걸어서 다닐 만한 거리"인지 대략 판단한다. 대중교통
+// 전용으로만 길을 찾으면 바로 옆 장소끼리도 정류장까지 갔다가 버스를
+// 타는 식으로 돌아가는 경로가 나오기 때문에, 가까운 구간은 도보(WALK)
+// 경로를 우선 확인한다.
+const haversineDistanceMeters = (a, b) => {
+  const dLat = toRadians(b.lat - a.lat);
+  const dLng = toRadians(b.lng - a.lng);
+  const lat1 = toRadians(a.lat);
+  const lat2 = toRadians(b.lat);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(h)));
+};
+
+const WALKABLE_DISTANCE_METERS = 1200; // 대략 도보 15분 이내
+
 const requestTransitRoute = async (origin, destination) => {
+  const isWalkable = haversineDistanceMeters(origin, destination) <= WALKABLE_DISTANCE_METERS;
+
   const response = await axios.post('https://routes.googleapis.com/directions/v2:computeRoutes', {
     origin: { location: { latLng: { latitude: origin.lat, longitude: origin.lng } } },
     destination: { location: { latLng: { latitude: destination.lat, longitude: destination.lng } } },
-    travelMode: 'TRANSIT',
-    transitPreferences: {
-      routingPreference: 'FEWER_TRANSFERS',
-      allowedTravelModes: ['BUS', 'SUBWAY']
-    }
+    travelMode: isWalkable ? 'WALK' : 'TRANSIT',
+    ...(isWalkable ? {} : {
+      transitPreferences: {
+        routingPreference: 'FEWER_TRANSFERS',
+        allowedTravelModes: ['BUS', 'SUBWAY']
+      }
+    })
   }, {
     headers: {
       'X-Goog-Api-Key': GOOGLE_MAPS_API_KEY,
