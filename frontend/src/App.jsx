@@ -312,12 +312,10 @@ function ShareSlotRow({
               href={`https://m.map.naver.com/search2/search.naver?query=${encodeURIComponent(
                 currentPlace.title || currentPlace.roadAddress
               )}`}
-              target="_blank"
-              rel="noopener noreferrer"
               className="action-sheet-btn"
               onClick={() => setShowMenu(false)}
             >
-              🗺️ 네이버 지도로 보기 ↗
+              네이버 지도로 보기 ↗
             </a>
 
             <button
