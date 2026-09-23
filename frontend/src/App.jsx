@@ -199,14 +199,14 @@ function ShareSlotRow({
   const currentPlace = slot.options[selectedIdx] || slot.options[0];
 
   useEffect(() => {
-    if (carouselRef.current && selectedIdx > 0) {
-      requestAnimationFrame(() => {
-        if (carouselRef.current) {
-          carouselRef.current.scrollLeft = carouselRef.current.clientWidth * selectedIdx;
-        }
-      });
-    }
-  }, [selectedIdx]);
+  if (carouselRef.current && selectedIdx >= 0) { 
+    requestAnimationFrame(() => {
+      if (carouselRef.current) {
+        carouselRef.current.scrollLeft = carouselRef.current.clientWidth * selectedIdx;
+      }
+    });
+  }
+}, [selectedIdx]);
 
   const handleCardClick = (place) => {
     if (onCardClick) onCardClick(place);
@@ -418,6 +418,10 @@ function SharePlanPage({ shareId }) {
     return slot.options[idx] || slot.options[0];
   });
 
+  const displayPlaces = focusedPlace 
+  ? [...mapPlaces.filter(p => p !== focusedPlace), focusedPlace]
+  : mapPlaces;
+
   const handleToggleVisit = (slotId) => {
     setVisitedSlots((prev) => ({
       ...prev,
@@ -433,7 +437,7 @@ function SharePlanPage({ shareId }) {
     <main className="share-shell">
       <div className="share-map-pane">
         <MapViewer
-          places={mapPlaces}
+          places={displayPlaces}
           focusedPlace={focusedPlace}
           fitToPlaces={!focusedPlace}
           sheetHeight={sheetHeight}
