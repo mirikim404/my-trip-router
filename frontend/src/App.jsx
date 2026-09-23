@@ -209,7 +209,6 @@ function ShareSlotRow({
     }
   }, [selectedIdx]);
 
-  // 터치 스와이프 처리 (방문 완료 버튼 노출)
   const handleTouchStart = (e) => {
     touchStartX.current = e.touches[0].clientX;
     isSwiping.current = true;
@@ -220,7 +219,6 @@ function ShareSlotRow({
     touchCurrentX.current = e.touches[0].clientX;
     const diffX = touchCurrentX.current - touchStartX.current;
 
-    // 왼쪽으로 스와이프할 때만 (최대 -80px)
     if (diffX < 0) {
       setSwipeOffset(Math.max(diffX, -80));
     } else if (swipeOffset < 0) {
@@ -231,9 +229,9 @@ function ShareSlotRow({
   const handleTouchEnd = () => {
     isSwiping.current = false;
     if (swipeOffset < -40) {
-      setSwipeOffset(-80); // 버튼 열림 고정
+      setSwipeOffset(-80);
     } else {
-      setSwipeOffset(0); // 원위치
+      setSwipeOffset(0);
     }
   };
 
@@ -288,7 +286,6 @@ function ShareSlotRow({
                     </span>
                   )}
 
-                  {/* 4. 우측 하단 네이버 지도 바로가기 버튼 */}
                   <a
                     href={`https://m.map.naver.com/search2/search.naver?query=${encodeURIComponent(
                       place.title || place.roadAddress
@@ -317,7 +314,6 @@ function ShareSlotRow({
           )}
         </div>
 
-        {/* 3. 스와이프 시 드러나는 방문 완료 / 숨김 버튼 */}
         <button
           type="button"
           className={`share-visit-btn ${isVisited ? 'is-undo' : ''}`}
@@ -340,7 +336,7 @@ function SharePlanPage({ shareId }) {
   const [status, setStatus] = useState('loading');
   const [view, setView] = useState('select');
   const [slotSelections, setSlotSelections] = useState({});
-  const [visitedSlots, setVisitedSlots] = useState({}); // 방문 처리된 슬롯 저장 ID
+  const [visitedSlots, setVisitedSlots] = useState({});
   const [focusedPlace, setFocusedPlace] = useState(null);
 
   const slotRefs = useRef({});
@@ -407,15 +403,13 @@ function SharePlanPage({ shareId }) {
   const activeDay = days.find((day) => day.key === selectedDay) || days[0];
   const allSlots = activeDay ? itinerary[activeDay.key] || [] : [];
 
-  // 방문 안 한 장소 vs 방문 완료한 장소 분리
+  // 미방문 장소
   const unvisitedSlots = allSlots.filter((slot) => !visitedSlots[slot.id]);
+  
+  // 방문 완료 장소 (오류 해결을 위해 변수 복구)
   const visitedSlotsList = allSlots.filter((slot) => visitedSlots[slot.id]);
 
-  // 💡 [수정됨] 마커 번호 동기화를 위해 방문 안 한 곳 -> 방문 한 곳 순서로 재배열
-  const reorderedSlots = [...unvisitedSlots, ...visitedSlotsList];
-
-  // 지도에 표시할 최종 리스트
-  const mapPlaces = reorderedSlots.map((slot) => {
+  const mapPlaces = unvisitedSlots.map((slot) => {
     const idx = slotSelections[slot.id] ?? slot.selectedIndex ?? 0;
     return slot.options[idx] || slot.options[0];
   });
@@ -438,7 +432,7 @@ function SharePlanPage({ shareId }) {
           places={mapPlaces}
           focusedPlace={focusedPlace}
           fitToPlaces={!focusedPlace}
-          sheetHeight={sheetHeight} /* 💡 바텀시트의 현재 픽셀 높이를 지도에 전달 */
+          sheetHeight={sheetHeight}
         />
       </div>
 
@@ -499,9 +493,9 @@ function SharePlanPage({ shareId }) {
                 />
               ))}
 
-              {/* 방문 완료한 장소 목록 (숨김/완료 영역) */}
+              {/* 방문 완료한 장소 목록 */}
               {visitedSlotsList.length > 0 && (
-                <div className="visited-section">
+                <li className="visited-section" style={{ listStyle: 'none' }}>
                   <div className="visited-section-title">방문 완료 ({visitedSlotsList.length})</div>
                   {visitedSlotsList.map((slot, index) => (
                     <ShareSlotRow
@@ -516,7 +510,7 @@ function SharePlanPage({ shareId }) {
                       onCardClick={handleCardClick}
                     />
                   ))}
-                </div>
+                </li>
               )}
             </ol>
           )}
