@@ -659,62 +659,117 @@ button:disabled {
   font-size: 13px;
 }
 
-.share-list ol {
-  display: grid;
-  gap: 10px;
+/* --- 아래 내용으로 기존 .share-list ol ~ .share-list em 부분을 교체 --- */
+
+.share-slots {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.share-list li {
-  display: grid;
-  grid-template-columns: 72px minmax(0, 1fr);
-  gap: 12px;
-  min-height: 72px;
-  padding: 10px;
-  border: 1px solid #e6ebf2;
-  border-radius: 8px;
-  background: #fbfcfe;
+.share-slot-item {
+  display: flex;
+  flex-direction: column;
 }
 
-.share-list img {
-  width: 72px;
-  height: 72px;
-  border-radius: 6px;
+.share-slot-carousel {
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.share-slot-carousel::-webkit-scrollbar {
+  display: none;
+}
+
+.share-slot-option {
+  flex: 0 0 100%;
+  scroll-snap-align: start;
+  box-sizing: border-box;
+  padding-right: 12px;
+}
+
+/* 실제 카드 디자인 */
+.share-place-card {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 16px;
+  border: 1px solid #e6ebf2;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.share-place-card img {
+  width: 56px;
+  height: 56px;
+  border-radius: 8px;
   object-fit: cover;
   background: #edf1f6;
+  flex-shrink: 0;
 }
 
-.share-list li:not(:has(img)) {
-  grid-template-columns: minmax(0, 1fr);
+/* 텍스트 세로 찌그러짐 방지용 래퍼 */
+.share-place-info {
+  flex: 1;
+  min-width: 0; 
 }
 
-.share-list strong,
-.share-list span,
-.share-list em {
+.share-place-info strong,
+.share-place-info span,
+.share-place-info em {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.share-list strong {
+.share-place-info strong {
   color: #172033;
   font-size: 15px;
 }
 
-.share-list span {
+.share-place-info span {
   margin-top: 4px;
   color: #64748b;
-  font-size: 12px;
+  font-size: 13px;
 }
 
-.share-list em {
-  margin-top: 8px;
-  color: #2563eb;
+.share-place-info em {
+  margin-top: 6px;
+  color: #94a3b8;
   font-size: 12px;
   font-style: normal;
+}
+
+.option-badge {
+  color: #2563eb;
+  margin-right: 6px;
+}
+
+/* 하단 페이지네이션 점 */
+.share-slot-dots {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.share-slot-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #e2e8f0;
+  transition: background 0.2s;
+}
+
+.share-slot-dot.is-active {
+  background: #2563eb;
 }
 
 .share-state {

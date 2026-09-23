@@ -304,54 +304,50 @@ function SharePlanPage({ shareId }) {
           {slots.length === 0 ? (
             <p className="empty-state">아직 추가된 장소가 없어요.</p>
           ) : (
-            <ol className="share-slots" style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+            <ol className="share-slots">
               {slots.map((slot, index) => {
                 const selectedIdx = slotSelections[slot.id] ?? slot.selectedIndex ?? 0;
                 return (
-                  <li key={slot.id} className="share-slot-item" style={{ paddingBottom: '20px' }}>
+                  <li key={slot.id} className="share-slot-item">
                     <div
                       className="share-slot-carousel"
-                      style={{ display: 'flex', overflowX: 'auto', scrollSnapType: 'x mandatory', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
                       onScroll={(e) => {
                         const width = e.target.clientWidth;
                         if (width === 0) return;
                         const newIndex = Math.round(e.target.scrollLeft / width);
-                        if (newIndex !== selectedIdx && newIndex < slot.options.length) {
+                        if (newIndex !== selectedIdx && newIndex >= 0 && newIndex < slot.options.length) {
                           setSlotSelections((prev) => ({ ...prev, [slot.id]: newIndex }));
                         }
                       }}
                     >
                       {slot.options.map((place, optIdx) => (
-                        <div 
-                          key={`${place.lat}-${place.lng}-${optIdx}`} 
-                          style={{ flex: '0 0 100%', scrollSnapAlign: 'start', paddingRight: '12px', boxSizing: 'border-box' }} // boxSizing 추가
-                        >
-                          <div className="share-place-card" style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                            {place.photoUrl && <img src={resolveApiUrl(place.photoUrl)} alt="" loading="lazy" style={{ width: '56px', height: '56px', borderRadius: '8px', objectFit: 'cover', flexShrink: 0 }} />}
-                            
-                            {/* 텍스트 영역 너비 찌그러짐 방지 (flex: 1, minWidth: 0) */}
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <strong style={{ display: 'block', fontSize: '15px', color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                {index + 1}. {slot.options.length > 1 && <span style={{ color: '#2563eb', marginRight: '6px' }}>{String.fromCharCode(65 + optIdx)}안</span>}
+                        <div key={`${place.lat}-${place.lng}-${optIdx}`} className="share-slot-option">
+                          <div className="share-place-card">
+                            {place.photoUrl && (
+                              <img src={resolveApiUrl(place.photoUrl)} alt="" loading="lazy" />
+                            )}
+                            <div className="share-place-info">
+                              <strong>
+                                {index + 1}. {slot.options.length > 1 && <span className="option-badge">{String.fromCharCode(65 + optIdx)}안</span>}
                                 {place.title}
                               </strong>
-                              <span style={{ display: 'block', fontSize: '13px', color: '#64748b', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                {place.roadAddress || place.address || '주소 정보 없음'}
-                              </span>
+                              <span>{place.roadAddress || place.address || '주소 정보 없음'}</span>
                               {(place.primaryType || place.placeType) && (
-                                <em style={{ display: 'block', fontSize: '12px', color: '#94a3b8', fontStyle: 'normal', marginTop: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                  {place.primaryType || place.placeType}
-                                </em>
+                                <em>{place.primaryType || place.placeType}</em>
                               )}
                             </div>
                           </div>
                         </div>
                       ))}
                     </div>
+
                     {slot.options.length > 1 && (
-                      <div className="share-slot-dots" style={{ display: 'flex', justifyContent: 'center', gap: '6px', marginTop: '12px' }}>
+                      <div className="share-slot-dots">
                         {slot.options.map((_, dotIdx) => (
-                          <span key={dotIdx} style={{ width: '6px', height: '6px', borderRadius: '50%', background: selectedIdx === dotIdx ? '#2563eb' : '#e2e8f0', transition: 'background 0.2s' }} />
+                          <span 
+                            key={dotIdx} 
+                            className={`share-slot-dot ${selectedIdx === dotIdx ? 'is-active' : ''}`} 
+                          />
                         ))}
                       </div>
                     )}
