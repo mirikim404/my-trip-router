@@ -110,7 +110,7 @@ const MapViewer = ({ places, fitToPlaces = false }) => {
           map: mapInstance.current,
           title: place.title,
           icon: {
-            content: `<div style="display:flex;align-items:center;justify-content:center;width:22px;height:22px;border:2px solid #fff;border-radius:50%;background:${markerColor};box-shadow:0 1px 4px rgba(15,23,42,.35);color:#fff;font:700 11px/1 sans-serif;">${index + 1}</div>`,
+            content: `<div style="display:flex;align-items:center;justify-content:center;width:22px;height:22px;border:2px solid #fff;border-radius:50%;background:${markerColor};box-shadow:0 1px 4px rgba(15,23,42,.35);color:#fff;font:700 11px/1 sans-serif;box-sizing:border-box;padding-top:1.5px;">${index + 1}</div>`,
             anchor: new window.naver.maps.Point(11, 11),
           },
         });

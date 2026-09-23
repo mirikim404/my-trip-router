@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
 import Sidebar from './components/Sidebar';
 import MapViewer from './components/MapViewer';
@@ -183,6 +183,73 @@ function ShareEntryPage({ profile, itinerary, onSelectDay }) {
   );
 }
 
+function ShareSlotRow({ slot, index, selectedIdx, onSelect }) {
+  const carouselRef = useRef(null);
+
+  useEffect(() => {
+    if (carouselRef.current && selectedIdx > 0) {
+      requestAnimationFrame(() => {
+        if (carouselRef.current) {
+          carouselRef.current.scrollLeft = carouselRef.current.clientWidth * selectedIdx;
+        }
+      });
+    }
+  }, [selectedIdx]);
+
+  return (
+    <li className="share-slot-item">
+      <div
+        ref={carouselRef}
+        className="share-slot-carousel"
+        onScroll={(e) => {
+          const width = e.target.clientWidth;
+          if (width === 0) return;
+          const newIndex = Math.round(e.target.scrollLeft / width);
+          if (newIndex !== selectedIdx && newIndex >= 0 && newIndex < slot.options.length) {
+            onSelect(newIndex);
+          }
+        }}
+      >
+        {slot.options.map((place, optIdx) => (
+          <div key={`${place.lat}-${place.lng}-${optIdx}`} className="share-slot-option">
+            <div className="share-place-card">
+              {place.photoUrl && (
+                <img src={resolveApiUrl(place.photoUrl)} alt="" loading="lazy" />
+              )}
+              <div className={`share-place-info ${slot.options.length > 1 ? 'has-badge' : ''}`}>
+                <strong>
+                  {index + 1}. {place.title}
+                </strong>
+                <span>{place.roadAddress || place.address || '주소 정보 없음'}</span>
+                {(place.primaryType || place.placeType) && (
+                  <em>{place.primaryType || place.placeType}</em>
+                )}
+              </div>
+              
+              {slot.options.length > 1 && (
+                <span className="option-badge">
+                  {String.fromCharCode(65 + optIdx)}안
+                </span>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {slot.options.length > 1 && (
+        <div className="share-slot-dots">
+          {slot.options.map((_, dotIdx) => (
+            <span 
+              key={dotIdx} 
+              className={`share-slot-dot ${selectedIdx === dotIdx ? 'is-active' : ''}`} 
+            />
+          ))}
+        </div>
+      )}
+    </li>
+  );
+}
+
 function SharePlanPage({ shareId }) {
   const [plan, setPlan] = useState(null);
   const [selectedDay, setSelectedDay] = useState('');
@@ -208,7 +275,7 @@ function SharePlanPage({ shareId }) {
         document.title = `${sharedPlan.profile.travelerName}의 여행 · My Trip Router`;
         setStatus('ready');
       } catch (error) {
-        console.error('공유 일정을 불러오지 못했습니다:', error);
+        console.error('플랜 로딩 실패:', error);
         setStatus('error');
       }
     };
@@ -305,61 +372,15 @@ function SharePlanPage({ shareId }) {
             <p className="empty-state">아직 추가된 장소가 없어요.</p>
           ) : (
             <ol className="share-slots">
-              {slots.map((slot, index) => {
-                const selectedIdx = slotSelections[slot.id] ?? slot.selectedIndex ?? 0;
-                return (
-                  <li key={slot.id} className="share-slot-item">
-                    <div
-                      className="share-slot-carousel"
-                      onScroll={(e) => {
-                        const width = e.target.clientWidth;
-                        if (width === 0) return;
-                        const newIndex = Math.round(e.target.scrollLeft / width);
-                        if (newIndex !== selectedIdx && newIndex >= 0 && newIndex < slot.options.length) {
-                          setSlotSelections((prev) => ({ ...prev, [slot.id]: newIndex }));
-                        }
-                      }}
-                    >
-                      {slot.options.map((place, optIdx) => (
-                        <div key={`${place.lat}-${place.lng}-${optIdx}`} className="share-slot-option">
-                          <div className="share-place-card">
-                            {place.photoUrl && (
-                              <img src={resolveApiUrl(place.photoUrl)} alt="" loading="lazy" />
-                            )}
-                            <div className={`share-place-info ${slot.options.length > 1 ? 'has-badge' : ''}`}>
-                              <strong>
-                                {index + 1}. {place.title}
-                              </strong>
-                              <span>{place.roadAddress || place.address || '주소 정보 없음'}</span>
-                              {(place.primaryType || place.placeType) && (
-                                <em>{place.primaryType || place.placeType}</em>
-                              )}
-                            </div>
-                            
-                            {/* 카드 우측 상단에 뱃지 표시 */}
-                            {slot.options.length > 1 && (
-                              <span className="option-badge">
-                                {String.fromCharCode(65 + optIdx)}안
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    {slot.options.length > 1 && (
-                      <div className="share-slot-dots">
-                        {slot.options.map((_, dotIdx) => (
-                          <span 
-                            key={dotIdx} 
-                            className={`share-slot-dot ${selectedIdx === dotIdx ? 'is-active' : ''}`} 
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </li>
-                );
-              })}
+              {slots.map((slot, index) => (
+                <ShareSlotRow
+                  key={slot.id}
+                  slot={slot}
+                  index={index}
+                  selectedIdx={slotSelections[slot.id] ?? slot.selectedIndex ?? 0}
+                  onSelect={(newIndex) => setSlotSelections((prev) => ({ ...prev, [slot.id]: newIndex }))}
+                />
+              ))}
             </ol>
           )}
         </div>
@@ -443,7 +464,7 @@ function App() {
 
       setShareStatus({ isSaving: false, url, copied });
     } catch (error) {
-      console.error(error);
+      console.error('공유 플랜 저장 실패:', error);
       alert('공유 링크를 만들지 못했어요. 백엔드 서버가 켜져 있는지 확인해주세요.');
       setShareStatus((previous) => ({ ...previous, isSaving: false }));
     }
