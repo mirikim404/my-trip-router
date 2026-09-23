@@ -338,6 +338,7 @@ function SharePlanPage({ shareId }) {
 function App() {
   const shareId = getShareIdFromPath();
   const initialProfile = useMemo(() => loadJson(PROFILE_STORAGE_KEY), []);
+  
   const [profile, setProfile] = useState(initialProfile);
   const [itinerary, setItinerary] = useState(() => {
     const savedPlan = loadJson(PLAN_STORAGE_KEY);
@@ -345,16 +346,14 @@ function App() {
       ? createEmptyItinerary(initialProfile.days, savedPlan || {})
       : savedPlan || {};
   });
-  // Day별로 만들어진 경로를 각각 기억해서, 다른 Day로 넘어갔다 와도
-  // (또는 공유할 때) 이전에 만든 경로가 사라지지 않게 한다.
-  // 모양: { [dayKey]: { places: [...], routeData: {...} } }
   const [routesByDay, setRoutesByDay] = useState(() => loadJson(ROUTES_STORAGE_KEY) || {});
   const [activeDay, setActiveDay] = useState(() => initialProfile?.days?.[0]?.key || '');
   const [shareStatus, setShareStatus] = useState({ isSaving: false, url: '', copied: false });
+  
+  const [currentShareId, setCurrentShareId] = useState(() => localStorage.getItem('currentPlanId') || null);
 
   useEffect(() => {
     if (shareId) return;
-
     if (profile) {
       localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profile));
     } else {
@@ -363,15 +362,11 @@ function App() {
   }, [profile, shareId]);
 
   useEffect(() => {
-    if (!shareId) {
-      localStorage.setItem(PLAN_STORAGE_KEY, JSON.stringify(itinerary));
-    }
+    if (!shareId) localStorage.setItem(PLAN_STORAGE_KEY, JSON.stringify(itinerary));
   }, [itinerary, shareId]);
 
   useEffect(() => {
-    if (!shareId) {
-      localStorage.setItem(ROUTES_STORAGE_KEY, JSON.stringify(routesByDay));
-    }
+    if (!shareId) localStorage.setItem(ROUTES_STORAGE_KEY, JSON.stringify(routesByDay));
   }, [routesByDay, shareId]);
 
   const clearDayRoute = (day) => {
@@ -385,13 +380,14 @@ function App() {
 
   const handleCreateTrip = ({ travelerName, startDate, endDate }) => {
     const days = buildTripDays(startDate, endDate);
-    const nextProfile = { travelerName, startDate, endDate, days };
-
-    setProfile(nextProfile);
+    setProfile({ travelerName, startDate, endDate, days });
     setItinerary((previous) => createEmptyItinerary(days, previous));
     setActiveDay(days[0]?.key || '');
     setRoutesByDay({});
     setShareStatus({ isSaving: false, url: '', copied: false });
+    
+    setCurrentShareId(null);
+    localStorage.removeItem('currentPlanId');
   };
 
   const handleResetTrip = () => {
@@ -400,17 +396,24 @@ function App() {
 
     setProfile(null);
     setShareStatus({ isSaving: false, url: '', copied: false });
+    
+    setCurrentShareId(null);
+    localStorage.removeItem('currentPlanId');
   };
 
   const handleSharePlan = async () => {
     if (!profile) return;
-
     setShareStatus((previous) => ({ ...previous, isSaving: true, copied: false }));
 
     try {
-      const { id } = await saveSharedPlan({ profile, itinerary, routesByDay });
-      const url = `${PUBLIC_BASE_URL || window.location.origin}/share/${id}`;
+      const { id } = await saveSharedPlan({ profile, itinerary, routesByDay }, currentShareId);
+      
+      if (!currentShareId) {
+        setCurrentShareId(id);
+        localStorage.setItem('currentPlanId', id);
+      }
 
+      const url = `${PUBLIC_BASE_URL || window.location.origin}/share/${id}`;
       let copied = false;
       try {
         await navigator.clipboard.writeText(url);
@@ -421,15 +424,13 @@ function App() {
 
       setShareStatus({ isSaving: false, url, copied });
     } catch (error) {
-      console.error('공유 링크 생성 실패:', error);
+      console.error(error);
       alert('공유 링크를 만들지 못했어요. 백엔드 서버가 켜져 있는지 확인해주세요.');
       setShareStatus((previous) => ({ ...previous, isSaving: false }));
     }
   };
 
   const handleAddPlace = (day, placeData) => {
-    // 새로 추가하는 장소는 옵션이 1개뿐인 새 슬롯으로 들어간다.
-    // (이후 다른 슬롯 위로 드래그하면 그 슬롯의 B안/C안으로 합쳐질 수 있다.)
     const slot = { id: createSlotId(), options: [placeData], selectedIndex: 0 };
     setItinerary((previous) => ({
       ...previous,
@@ -445,8 +446,6 @@ function App() {
       const slot = slots[indexToRemove];
       if (!slot) return previous;
 
-      // 합쳐진 슬롯(옵션 2개 이상)이면 현재 보이는 옵션 하나만 지우고 슬롯은 남긴다.
-      // 옵션이 1개뿐이면 슬롯 자체를 목록에서 제거한다.
       if (slot.options.length > 1) {
         const nextOptions = slot.options.filter((_, i) => i !== (slot.selectedIndex ?? 0));
         return {
@@ -456,14 +455,12 @@ function App() {
           )),
         };
       }
-
       return { ...previous, [day]: slots.filter((_, index) => index !== indexToRemove) };
     });
     clearDayRoute(day);
     setShareStatus((previous) => ({ ...previous, url: '', copied: false }));
   };
 
-  // 슬롯 하나가 좌우 스와이프로 A안/B안 중 어떤 걸 보여줄지 바뀔 때.
   const handleSelectOption = (day, slotId, nextIndex) => {
     setItinerary((previous) => ({
       ...previous,
@@ -471,14 +468,10 @@ function App() {
         slot.id === slotId ? { ...slot, selectedIndex: nextIndex } : slot
       )),
     }));
-    // 대표로 보여주는 장소가 바뀌었으니, 이미 만들어둔 경로는 더 이상 맞지 않는다.
     clearDayRoute(day);
     setShareStatus((previous) => ({ ...previous, url: '', copied: false }));
   };
 
-  // fromSlot을 toSlot 위로 드래그해서 놓았을 때 — fromSlot이 지금 보여주고
-  // 있던 옵션 하나만 떼어내서 toSlot의 다음 대안(B안/C안...)으로 편입시킨다.
-  // fromSlot에 옵션이 더 남아있으면 그 슬롯은 줄어든 채로 남고, 없으면 사라진다.
   const handleMergeIntoSlot = (day, fromSlotId, toSlotId) => {
     if (fromSlotId === toSlotId) return;
 
@@ -492,19 +485,11 @@ function App() {
       const movingOption = fromSlot.options[fromIndex];
       const remainingOptions = fromSlot.options.filter((_, i) => i !== fromIndex);
 
-      const nextSlots = slots
-        .map((slot) => {
-          if (slot.id === toSlotId) {
-            return { ...slot, options: [...slot.options, movingOption] };
-          }
-          if (slot.id === fromSlotId) {
-            return remainingOptions.length > 0
-              ? { ...slot, options: remainingOptions, selectedIndex: 0 }
-              : null;
-          }
-          return slot;
-        })
-        .filter(Boolean);
+      const nextSlots = slots.map((slot) => {
+        if (slot.id === toSlotId) return { ...slot, options: [...slot.options, movingOption] };
+        if (slot.id === fromSlotId) return remainingOptions.length > 0 ? { ...slot, options: remainingOptions, selectedIndex: 0 } : null;
+        return slot;
+      }).filter(Boolean);
 
       return { ...previous, [day]: nextSlots };
     });
@@ -527,16 +512,8 @@ function App() {
 
   const handleOptimizeRoute = async (day, selectedPlaces) => {
     const places = selectedPlaces;
-
-    if (places.length < 2) {
-      alert('경로를 만들 장소를 2개 이상 선택해주세요.');
-      return;
-    }
-
-    if (places.some((place) => !Number.isFinite(place.lat) || !Number.isFinite(place.lng))) {
-      alert('장소 좌표를 확인할 수 없어요. 검색 결과를 다시 추가해주세요.');
-      return;
-    }
+    if (places.length < 2) return alert('경로를 만들 장소를 2개 이상 선택해주세요.');
+    if (places.some((place) => !Number.isFinite(place.lat) || !Number.isFinite(place.lng))) return alert('장소 좌표를 확인할 수 없어요.');
 
     try {
       const routeData = await fetchTransitDirections(places);
@@ -546,26 +523,16 @@ function App() {
         [day]: { places: optimizedPlaces, routeData },
       }));
     } catch (error) {
-      console.error('경로 탐색 중 오류가 발생했습니다:', error);
       const details = error.response?.data?.details;
-      const message = typeof details === 'string'
-        ? details
-        : details?.message || details?.error?.message;
-      alert(message || '경로 탐색에 실패했어요. 출발지와 도착지의 위치를 확인해주세요.');
+      const message = typeof details === 'string' ? details : details?.message || details?.error?.message;
+      alert(message || '경로 탐색에 실패했어요.');
     }
   };
 
-  if (shareId) {
-    return <SharePlanPage shareId={shareId} />;
-  }
+  if (shareId) return <SharePlanPage shareId={shareId} />;
+  if (!profile) return <SignupScreen onCreateTrip={handleCreateTrip} />;
 
-  if (!profile) {
-    return <SignupScreen onCreateTrip={handleCreateTrip} />;
-  }
-
-  const activeDayKey = profile.days.some((day) => day.key === activeDay)
-    ? activeDay
-    : profile.days[0]?.key || '';
+  const activeDayKey = profile.days.some((day) => day.key === activeDay) ? activeDay : profile.days[0]?.key || '';
   const activeDayRoute = routesByDay[activeDayKey];
   const mapPlaces = activeDayRoute?.places || [];
   const mapRouteData = activeDayRoute?.routeData || null;
@@ -588,7 +555,6 @@ function App() {
         onSharePlan={handleSharePlan}
         shareStatus={shareStatus}
       />
-
       <div className="map-pane">
         <MapViewer places={mapPlaces} routeData={mapRouteData} fitToPlaces />
       </div>

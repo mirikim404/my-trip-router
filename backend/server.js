@@ -335,6 +335,37 @@ app.post('/api/transit', async (req, res) => {
     res.status(status).json({ error: 'Transit API Error', details });
   }
 });
+
+app.put('/api/plans/:id', async (req, res) => {
+  try {
+    const cleanPlan = sanitizePlan(req.body);
+    if (!cleanPlan) {
+      return res.status(400).json({ error: 'Invalid plan payload.' });
+    }
+
+    const shareId = req.params.id;
+    const existingPlan = await Plan.findOne({ shareId });
+
+    if (!existingPlan) {
+      return res.status(404).json({ error: 'Plan not found.' });
+    }
+
+    const now = new Date().toISOString();
+    const finalPlanData = {
+      id: shareId,
+      ...cleanPlan,
+      createdAt: existingPlan.planData.createdAt,
+      updatedAt: now,
+    };
+
+    existingPlan.planData = finalPlanData;
+    await existingPlan.save();
+
+    res.json({ id: shareId, plan: finalPlanData });
+  } catch (error) {
+    res.status(500).json({ error: 'Plan Update Error' });
+  }
+});
   
 app.get('/api/place-photo', async (req, res) => {
   try {
