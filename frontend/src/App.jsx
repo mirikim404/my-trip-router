@@ -183,8 +183,21 @@ function ShareEntryPage({ profile, itinerary, onSelectDay }) {
   );
 }
 
-function ShareSlotRow({ slot, index, selectedIdx, onSelect }) {
+function ShareSlotRow({
+  slot,
+  index,
+  selectedIdx,
+  onSelect,
+  isVisited,
+  onToggleVisit,
+  onCardClick,
+  rowRef,
+}) {
   const carouselRef = useRef(null);
+  const [swipeOffset, setSwipeOffset] = useState(0);
+  const touchStartX = useRef(0);
+  const touchCurrentX = useRef(0);
+  const isSwiping = useRef(false);
 
   useEffect(() => {
     if (carouselRef.current && selectedIdx > 0) {
@@ -196,56 +209,127 @@ function ShareSlotRow({ slot, index, selectedIdx, onSelect }) {
     }
   }, [selectedIdx]);
 
-  return (
-    <li className="share-slot-item">
-      <div
-        ref={carouselRef}
-        className="share-slot-carousel"
-        onScroll={(e) => {
-          const width = e.target.clientWidth;
-          if (width === 0) return;
-          const newIndex = Math.round(e.target.scrollLeft / width);
-          if (newIndex !== selectedIdx && newIndex >= 0 && newIndex < slot.options.length) {
-            onSelect(newIndex);
-          }
-        }}
-      >
-        {slot.options.map((place, optIdx) => (
-          <div key={`${place.lat}-${place.lng}-${optIdx}`} className="share-slot-option">
-            <div className="share-place-card">
-              {place.photoUrl && (
-                <img src={resolveApiUrl(place.photoUrl)} alt="" loading="lazy" />
-              )}
-              <div className={`share-place-info ${slot.options.length > 1 ? 'has-badge' : ''}`}>
-                <strong>
-                  {index + 1}. {place.title}
-                </strong>
-                <span>{place.roadAddress || place.address || '주소 정보 없음'}</span>
-                {(place.primaryType || place.placeType) && (
-                  <em>{place.primaryType || place.placeType}</em>
-                )}
-              </div>
-              
-              {slot.options.length > 1 && (
-                <span className="option-badge">
-                  {String.fromCharCode(65 + optIdx)}안
-                </span>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
+  // 터치 스와이프 처리 (방문 완료 버튼 노출)
+  const handleTouchStart = (e) => {
+    touchStartX.current = e.touches[0].clientX;
+    isSwiping.current = true;
+  };
 
-      {slot.options.length > 1 && (
-        <div className="share-slot-dots">
-          {slot.options.map((_, dotIdx) => (
-            <span 
-              key={dotIdx} 
-              className={`share-slot-dot ${selectedIdx === dotIdx ? 'is-active' : ''}`} 
-            />
-          ))}
+  const handleTouchMove = (e) => {
+    if (!isSwiping.current) return;
+    touchCurrentX.current = e.touches[0].clientX;
+    const diffX = touchCurrentX.current - touchStartX.current;
+    
+    // 왼쪽으로 스와이프할 때만 (최대 -80px)
+    if (diffX < 0) {
+      setSwipeOffset(Math.max(diffX, -80));
+    } else if (swipeOffset < 0) {
+      setSwipeOffset(Math.min(0, swipeOffset + diffX));
+    }
+  };
+
+  const handleTouchEnd = () => {
+    isSwiping.current = false;
+    if (swipeOffset < -40) {
+      setSwipeOffset(-80); // 버튼 열림 고정
+    } else {
+      setSwipeOffset(0); // 원위치
+    }
+  };
+
+  return (
+    <li
+      ref={rowRef}
+      className={`share-slot-item ${isVisited ? 'is-visited' : ''}`}
+      onClick={() => {
+        const currentPlace = slot.options[selectedIdx] || slot.options[0];
+        if (currentPlace && onCardClick) onCardClick(currentPlace);
+      }}
+    >
+      <div className="share-card-wrapper">
+        <div
+          className="share-card-content"
+          style={{ transform: `translateX(${swipeOffset}px)` }}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+        >
+          <div
+            ref={carouselRef}
+            className="share-slot-carousel"
+            onScroll={(e) => {
+              const width = e.target.clientWidth;
+              if (width === 0) return;
+              const newIndex = Math.round(e.target.scrollLeft / width);
+              if (newIndex !== selectedIdx && newIndex >= 0 && newIndex < slot.options.length) {
+                onSelect(newIndex);
+              }
+            }}
+          >
+            {slot.options.map((place, optIdx) => (
+              <div key={`${place.lat}-${place.lng}-${optIdx}`} className="share-slot-option">
+                <div className="share-place-card">
+                  {place.photoUrl && (
+                    <img src={resolveApiUrl(place.photoUrl)} alt="" loading="lazy" />
+                  )}
+                  <div className={`share-place-info ${slot.options.length > 1 ? 'has-badge' : ''}`}>
+                    <strong>
+                      {!isVisited && `${index + 1}. `}{place.title}
+                    </strong>
+                    <span>{place.roadAddress || place.address || '주소 정보 없음'}</span>
+                    {(place.primaryType || place.placeType) && (
+                      <em>{place.primaryType || place.placeType}</em>
+                    )}
+                  </div>
+                  
+                  {slot.options.length > 1 && (
+                    <span className="option-badge">
+                      {String.fromCharCode(65 + optIdx)}안
+                    </span>
+                  )}
+
+                  {/* 4. 우측 하단 네이버 지도 바로가기 버튼 */}
+                  <a
+                    href={`https://m.map.naver.com/search2/search.naver?query=${encodeURIComponent(
+                      place.title || place.roadAddress
+                    )}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="naver-map-link"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    네이버 지도 ↗
+                  </a>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {slot.options.length > 1 && (
+            <div className="share-slot-dots">
+              {slot.options.map((_, dotIdx) => (
+                <span 
+                  key={dotIdx} 
+                  className={`share-slot-dot ${selectedIdx === dotIdx ? 'is-active' : ''}`} 
+                />
+              ))}
+            </div>
+          )}
         </div>
-      )}
+
+        {/* 3. 스와이프 시 드러나는 방문 완료 / 숨김 버튼 */}
+        <button
+          type="button"
+          className={`share-visit-btn ${isVisited ? 'is-undo' : ''}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            setSwipeOffset(0);
+            onToggleVisit(slot.id);
+          }}
+        >
+          {isVisited ? '방문 취소' : '방문 완료'}
+        </button>
+      </div>
     </li>
   );
 }
@@ -256,6 +340,10 @@ function SharePlanPage({ shareId }) {
   const [status, setStatus] = useState('loading');
   const [view, setView] = useState('select');
   const [slotSelections, setSlotSelections] = useState({});
+  const [visitedSlots, setVisitedSlots] = useState({}); // 방문 처리된 슬롯 저장 ID
+  const [focusedPlace, setFocusedPlace] = useState(null);
+
+  const slotRefs = useRef({});
 
   const {
     sheetHeight,
@@ -317,17 +405,33 @@ function SharePlanPage({ shareId }) {
   }
 
   const activeDay = days.find((day) => day.key === selectedDay) || days[0];
-  const slots = activeDay ? itinerary[activeDay.key] || [] : [];
+  const allSlots = activeDay ? itinerary[activeDay.key] || [] : [];
   
-  const mapPlaces = slots.map((slot) => {
+  // 방문 안 한 장소 vs 방문 완료한 장소 분리 (방문 완료 시 아래로 이동)
+  const unvisitedSlots = allSlots.filter((slot) => !visitedSlots[slot.id]);
+  const visitedSlotsList = allSlots.filter((slot) => visitedSlots[slot.id]);
+
+  const mapPlaces = unvisitedSlots.map((slot) => {
     const idx = slotSelections[slot.id] ?? slot.selectedIndex ?? 0;
     return slot.options[idx] || slot.options[0];
   });
 
+  const handleToggleVisit = (slotId) => {
+    setVisitedSlots((prev) => ({
+      ...prev,
+      [slotId]: !prev[slotId],
+    }));
+  };
+
+  const handleCardClick = (place) => {
+    setFocusedPlace(place);
+  };
+
   return (
     <main className="share-shell">
       <div className="share-map-pane">
-        <MapViewer places={mapPlaces} fitToPlaces />
+        {/* focusedPlace를 함께 넘겨 선택한 카드로 지도 중심 이동 */}
+        <MapViewer places={focusedPlace ? [focusedPlace, ...mapPlaces] : mapPlaces} fitToPlaces={!focusedPlace} />
       </div>
 
       <section
@@ -365,22 +469,47 @@ function SharePlanPage({ shareId }) {
         <div className="share-list" aria-label={`${activeDay?.label || 'Day'} 장소 목록`}>
           <div className="share-list-header">
             <h2>{activeDay?.label}</h2>
-            <span>{slots.length}곳</span>
+            <span>{unvisitedSlots.length}곳 남음</span>
           </div>
 
-          {slots.length === 0 ? (
+          {allSlots.length === 0 ? (
             <p className="empty-state">아직 추가된 장소가 없어요.</p>
           ) : (
             <ol className="share-slots">
-              {slots.map((slot, index) => (
+              {/* 미방문 장소 목록 */}
+              {unvisitedSlots.map((slot, index) => (
                 <ShareSlotRow
                   key={slot.id}
+                  rowRef={(el) => (slotRefs.current[slot.id] = el)}
                   slot={slot}
                   index={index}
                   selectedIdx={slotSelections[slot.id] ?? slot.selectedIndex ?? 0}
                   onSelect={(newIndex) => setSlotSelections((prev) => ({ ...prev, [slot.id]: newIndex }))}
+                  isVisited={false}
+                  onToggleVisit={handleToggleVisit}
+                  onCardClick={handleCardClick}
                 />
               ))}
+
+              {/* 방문 완료한 장소 목록 (숨김/완료 영역) */}
+              {visitedSlotsList.length > 0 && (
+                <div className="visited-section">
+                  <div className="visited-section-title">방문 완료 ({visitedSlotsList.length})</div>
+                  {visitedSlotsList.map((slot, index) => (
+                    <ShareSlotRow
+                      key={slot.id}
+                      rowRef={(el) => (slotRefs.current[slot.id] = el)}
+                      slot={slot}
+                      index={index}
+                      selectedIdx={slotSelections[slot.id] ?? slot.selectedIndex ?? 0}
+                      onSelect={(newIndex) => setSlotSelections((prev) => ({ ...prev, [slot.id]: newIndex }))}
+                      isVisited={true}
+                      onToggleVisit={handleToggleVisit}
+                      onCardClick={handleCardClick}
+                    />
+                  ))}
+                </div>
+              )}
             </ol>
           )}
         </div>

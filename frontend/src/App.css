@@ -701,7 +701,7 @@ button:disabled {
 }
 
 .share-list {
-  padding: 18px;
+  padding: 18px 24px 18px 18px; 
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -713,6 +713,7 @@ button:disabled {
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 12px;
+  padding-right: 4px;
 }
 
 .share-list h2 {
@@ -767,11 +768,11 @@ button:disabled {
   display: flex;
   gap: 12px;
   align-items: flex-start;
-  padding: 16px;
+  padding: 16px 16px 36px 16px; /* 아래 여백을 36px로 늘림 */
   border: 1px solid #e6ebf2;
   border-radius: 12px;
   background: #ffffff;
-  position: relative; /* 우측 상단 뱃지 고정을 위해 추가 */
+  position: relative; /* 네이버 지도 버튼을 절대 위치로 넣기 위해 필수 */
 }
 
 .share-place-card img {
@@ -1182,4 +1183,92 @@ button:disabled {
   background: #2563eb;
   border-color: #2563eb;
   color: #ffffff;
+}
+
+/* ========================================================= */
+/* 추가된 기능: 스와이프 방문 완료 & 네이버 지도 버튼 스타일 */
+/* ========================================================= */
+
+.share-card-wrapper {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  border-radius: 12px;
+}
+
+.share-card-content {
+  position: relative;
+  z-index: 2;
+  background: #ffffff;
+  transition: transform 0.2s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.share-visit-btn {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 80px;
+  z-index: 1;
+  border: 0;
+  background: #22c55e;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.share-visit-btn.is-undo {
+  background: #64748b; /* 복원(방문 취소) 버튼 색상 */
+}
+
+/* 방문 완료 처리된 카드 투명도 및 취소선 */
+.share-slot-item.is-visited {
+  opacity: 0.55;
+}
+
+.share-slot-item.is-visited .share-place-info strong {
+  text-decoration: line-through;
+  color: #64748b;
+}
+
+/* 방문 완료 섹션 (하단으로 이동한 목록) */
+.visited-section {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px dashed #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.visited-section-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #94a3b8;
+  margin-bottom: 4px;
+  padding-left: 4px;
+}
+
+/* 네이버 지도 바로가기 버튼 */
+.naver-map-link {
+  position: absolute;
+  right: 14px;
+  bottom: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #03c75a;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  padding: 3px 8px;
+  border-radius: 6px;
+  text-decoration: none;
+  transition: background 0.15s ease;
+}
+
+.naver-map-link:active {
+  background: #dcfce7;
 }
