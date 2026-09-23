@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { resolveApiUrl } from '../api/config';
 
-// 💡 sheetHeight prop 추가
 const MapViewer = ({ places, focusedPlace, fitToPlaces = false, sheetHeight = 0 }) => {
   const mapElement = useRef(null);
   const mapInstance = useRef(null);
@@ -17,6 +16,7 @@ const MapViewer = ({ places, focusedPlace, fitToPlaces = false, sheetHeight = 0 
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
 
+  // 네이버 지도 인스턴스 초기화
   useEffect(() => {
     if (!window.naver || !window.naver.maps) {
       console.error('네이버 지도 API 스크립트가 로드되지 않았습니다.');
@@ -41,6 +41,7 @@ const MapViewer = ({ places, focusedPlace, fitToPlaces = false, sheetHeight = 0 
     }
   }, []);
 
+  // 컨테이너 크기 변경 감지 및 지도 리사이즈 처리
   useEffect(() => {
     const container = mapElement.current;
     if (!container || !window.naver?.maps) return undefined;
@@ -60,6 +61,7 @@ const MapViewer = ({ places, focusedPlace, fitToPlaces = false, sheetHeight = 0 
     };
   }, []);
 
+  // 마커 및 정보창(InfoWindow) 렌더링
   useEffect(() => {
     if (!mapInstance.current || !window.naver || !isMapReady) return;
 
@@ -79,9 +81,13 @@ const MapViewer = ({ places, focusedPlace, fitToPlaces = false, sheetHeight = 0 
       }
 
       places.forEach((place, index) => {
+        // 현재 마커가 포커스된 장소인지 확인
+        const isFocused = focusedPlace && place.lat === focusedPlace.lat && place.lng === focusedPlace.lng;
         const isStart = index === 0;
-        const isGoal = index === places.length - 1;
-        const markerColor = isStart ? '#16a34a' : isGoal ? '#dc2626' : '#2563eb';
+
+        // 포커싱된 마커는 빨간색, 첫 번째 마커는 초록색, 그 외는 파란색
+        const markerColor = isFocused ? '#dc2626' : (isStart ? '#16a34a' : '#2563eb');
+
         const placeTitle = escapeHtml(place.title);
         const placeRoadAddress = escapeHtml(place.roadAddress || place.address);
         const placeCategory = escapeHtml(place.category);
@@ -94,6 +100,7 @@ const MapViewer = ({ places, focusedPlace, fitToPlaces = false, sheetHeight = 0 
         const primaryType = escapeHtml(place.primaryType);
         const averageMenuPrice = Number(place.averageMenuPrice);
         const telephone = escapeHtml(place.nationalPhoneNumber || place.telephone);
+
         const infoContent = `
           <div style="padding:12px 14px;border:1px solid #dbe3ef;border-radius:10px;background:#fff;box-shadow:0 4px 14px rgba(15,23,42,.18);font-family:sans-serif;width:260px;">
             ${photoUrl ? `<img src="${photoUrl}" alt="${placeTitle}" style="display:block;width:calc(100% + 28px);height:160px;object-fit:cover;object-position:center center;margin:-12px -14px 10px;border-radius:10px 10px 0 0;">` : ''}
@@ -106,10 +113,12 @@ const MapViewer = ({ places, focusedPlace, fitToPlaces = false, sheetHeight = 0 
             ${naverMapLink ? `<a href="${naverMapLink}" target="_blank" rel="noreferrer" style="display:inline-block;margin-top:8px;color:#2563eb;font-size:12px;text-decoration:none;">네이버 지도에서 보기 ↗</a>` : placeLink ? `<a href="${placeLink}" target="_blank" rel="noreferrer" style="display:inline-block;margin-top:8px;color:#2563eb;font-size:12px;text-decoration:none;">네이버에서 자세히 보기 ↗</a>` : googleMapsUri ? `<a href="${googleMapsUri}" target="_blank" rel="noreferrer" style="display:inline-block;margin-top:8px;color:#2563eb;font-size:12px;text-decoration:none;">Google에서 자세히 보기 ↗</a>` : ''}
           </div>
         `;
+
         const marker = new window.naver.maps.Marker({
           position: new window.naver.maps.LatLng(place.lat, place.lng),
           map: mapInstance.current,
           title: place.title,
+          zIndex: isFocused ? 100 : 1, // 포커싱된 마커를 맨 위로 올림
           icon: {
             content: `<div style="display:flex;align-items:center;justify-content:center;width:22px;height:22px;border:2px solid #fff;border-radius:50%;background:${markerColor};box-shadow:0 1px 4px rgba(15,23,42,.35);color:#fff;font:700 11px/1 sans-serif;box-sizing:border-box;padding-top:1.5px;">${index + 1}</div>`,
             anchor: new window.naver.maps.Point(11, 11),
@@ -138,61 +147,55 @@ const MapViewer = ({ places, focusedPlace, fitToPlaces = false, sheetHeight = 0 
           showInfo();
         });
 
+        // 현재 포커스된 장소라면 인포윈도우 자동 표시
+        if (isFocused) {
+          selectedMarker.current = marker;
+          showInfo();
+        }
+
         markers.current.push(marker);
       });
 
-      if (fitToPlaces && places.length > 1) {
-        const lats = places.map((place) => place.lat);
-        const lngs = places.map((place) => place.lng);
-        const bounds = new window.naver.maps.LatLngBounds(
-          new window.naver.maps.LatLng(Math.min(...lats), Math.min(...lngs)),
-          new window.naver.maps.LatLng(Math.max(...lats), Math.max(...lngs)),
-        );
-        mapInstance.current.fitBounds(bounds, { top: 48, right: 32, bottom: 32, left: 32 });
-      } else {
-        mapInstance.current.setCenter(new window.naver.maps.LatLng(places[0].lat, places[0].lng));
-        if (fitToPlaces) mapInstance.current.setZoom(15);
+      // 포커스된 장소가 없을 때만 지도 가시 영역(Bounds/Center) 조정
+      if (!focusedPlace) {
+        if (fitToPlaces && places.length > 1) {
+          const lats = places.map((place) => place.lat);
+          const lngs = places.map((place) => place.lng);
+          const bounds = new window.naver.maps.LatLngBounds(
+            new window.naver.maps.LatLng(Math.min(...lats), Math.min(...lngs)),
+            new window.naver.maps.LatLng(Math.max(...lats), Math.max(...lngs)),
+          );
+          mapInstance.current.fitBounds(bounds, { top: 48, right: 32, bottom: 32, left: 32 });
+        } else {
+          mapInstance.current.setCenter(new window.naver.maps.LatLng(places[0].lat, places[0].lng));
+          if (fitToPlaces) mapInstance.current.setZoom(15);
+        }
       }
     }
-  }, [places, fitToPlaces, isMapReady]);
+  }, [places, focusedPlace, fitToPlaces, isMapReady]);
 
-  // 💡 포커싱 보정 로직 적용
+  // 선택된 장소(focusedPlace)로 중심 이동 및 바텀시트 위치 보정
   useEffect(() => {
     if (!mapInstance.current || !window.naver || !isMapReady || !focusedPlace) return;
 
     const targetLatLng = new window.naver.maps.LatLng(focusedPlace.lat, focusedPlace.lng);
-    
-    // 1. 줌 레벨을 먼저 맞춥니다.
     mapInstance.current.setZoom(15, true);
 
-    // 2. 현재 시트 높이를 가져옵니다. (없으면 화면 절반으로 간주)
     const currentSheetHeight = sheetHeight || (window.innerHeight / 2);
 
-    // 3. 줌이 적용될 수 있도록 아주 짧은 딜레이 후 중심점 보정 이동 실행
     setTimeout(() => {
       if (!mapInstance.current) return;
       
       const proj = mapInstance.current.getProjection();
-      
-      // 타겟 마커의 화면상 현재 픽셀 위치를 계산합니다.
       const targetOffset = proj.fromCoordToOffset(targetLatLng);
-      
-      // 마커를 바텀시트 밖(화면 위쪽)으로 밀어 올리기 위해,
-      // 새롭게 중심이 될 지점을 마커보다 더 남쪽(y값 증가 방향)으로 내립니다.
-      // 바텀시트가 가리는 높이의 절반 + 상단 여백(20px)만큼 내립니다.
+
+      // 바텀시트에 가려지지 않도록 Y축 좌표 보정
       targetOffset.y += (currentSheetHeight / 2) + 20;
 
-      // 계산된 새로운 픽셀 좌표를 다시 실제 위경도로 변환합니다.
       const adjustedCenter = proj.fromOffsetToCoord(targetOffset);
-      
-      // 보정된 중심으로 부드럽게 지도를 이동합니다.
       mapInstance.current.panTo(adjustedCenter);
     }, 100);
-
-  }, [focusedPlace, isMapReady]); 
-  // 💡 주의: sheetHeight는 deps에 넣지 않습니다. 
-  // 바텀시트를 위아래로 '드래그할 때'마다 지도가 떨리면서 따라다니는 현상을 막고, 
-  // 목록을 '클릭한 시점'의 높이만을 기준으로 1회 계산하기 위함입니다.
+  }, [focusedPlace, isMapReady]);
 
   return <div ref={mapElement} style={{ width: '100%', height: '100%' }} />;
 };
