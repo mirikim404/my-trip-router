@@ -821,6 +821,7 @@ button:disabled {
   flex-direction: column;
   flex: 1;
   min-width: 0; /* 줄임표 인식용 */
+  overflow: hidden;
   padding-right: 24px;
 }
 
@@ -829,6 +830,7 @@ button:disabled {
 .share-place-info em {
   display: block;
   width: 100%;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
