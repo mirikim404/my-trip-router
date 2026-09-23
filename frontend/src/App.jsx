@@ -69,6 +69,12 @@ const getShareIdFromPath = () => {
   return match?.[1] || null;
 };
 
+// itinerary[day]의 각 항목("슬롯")을 구분하기 위한 id.
+// 슬롯은 { id, options: [place, ...], selectedIndex } 형태로,
+// 장소 하나를 다른 장소 위로 드래그해서 합치면 options가 2개 이상이 된다.
+let slotIdSeed = 0;
+const createSlotId = () => `slot-${Date.now()}-${slotIdSeed++}`;
+
 function SignupScreen({ onCreateTrip }) {
   const [travelerName, setTravelerName] = useState('');
   const [startDate, setStartDate] = useState('');
@@ -237,6 +243,9 @@ function SharePlanPage({ shareId }) {
 
   const { profile, itinerary, routesByDay = {} } = plan;
   const days = profile.days || [];
+  // 공유된 itinerary도 슬롯({ id, options, selectedIndex }) 형태이므로,
+  // 보여줄 때는 각 슬롯이 현재 가리키는 옵션(장소) 하나로 펼쳐서 쓴다.
+  const toActivePlace = (slot) => slot.options?.[slot.selectedIndex ?? 0] || slot;
 
   if (view === 'select') {
     return (
@@ -252,7 +261,8 @@ function SharePlanPage({ shareId }) {
   }
 
   const activeDay = days.find((day) => day.key === selectedDay) || days[0];
-  const places = activeDay ? itinerary[activeDay.key] || [] : [];
+  const slots = activeDay ? itinerary[activeDay.key] || [] : [];
+  const places = slots.map(toActivePlace);
   const activeDayRoute = activeDay ? routesByDay[activeDay.key] : null;
   // 경로가 만들어져 있으면 정렬된 순서(출발→도착)로 지도를 그리고, 없으면
   // 저장된 목록 그대로 마커만 보여준다.
@@ -418,19 +428,86 @@ function App() {
   };
 
   const handleAddPlace = (day, placeData) => {
+    // 새로 추가하는 장소는 옵션이 1개뿐인 새 슬롯으로 들어간다.
+    // (이후 다른 슬롯 위로 드래그하면 그 슬롯의 B안/C안으로 합쳐질 수 있다.)
+    const slot = { id: createSlotId(), options: [placeData], selectedIndex: 0 };
     setItinerary((previous) => ({
       ...previous,
-      [day]: [...(previous[day] || []), placeData],
+      [day]: [...(previous[day] || []), slot],
     }));
     clearDayRoute(day);
     setShareStatus((previous) => ({ ...previous, url: '', copied: false }));
   };
 
   const handleDeletePlace = (day, indexToRemove) => {
+    setItinerary((previous) => {
+      const slots = previous[day] || [];
+      const slot = slots[indexToRemove];
+      if (!slot) return previous;
+
+      // 합쳐진 슬롯(옵션 2개 이상)이면 현재 보이는 옵션 하나만 지우고 슬롯은 남긴다.
+      // 옵션이 1개뿐이면 슬롯 자체를 목록에서 제거한다.
+      if (slot.options.length > 1) {
+        const nextOptions = slot.options.filter((_, i) => i !== (slot.selectedIndex ?? 0));
+        return {
+          ...previous,
+          [day]: slots.map((item, index) => (
+            index === indexToRemove ? { ...item, options: nextOptions, selectedIndex: 0 } : item
+          )),
+        };
+      }
+
+      return { ...previous, [day]: slots.filter((_, index) => index !== indexToRemove) };
+    });
+    clearDayRoute(day);
+    setShareStatus((previous) => ({ ...previous, url: '', copied: false }));
+  };
+
+  // 슬롯 하나가 좌우 스와이프로 A안/B안 중 어떤 걸 보여줄지 바뀔 때.
+  const handleSelectOption = (day, slotId, nextIndex) => {
     setItinerary((previous) => ({
       ...previous,
-      [day]: (previous[day] || []).filter((_, index) => index !== indexToRemove),
+      [day]: (previous[day] || []).map((slot) => (
+        slot.id === slotId ? { ...slot, selectedIndex: nextIndex } : slot
+      )),
     }));
+    // 대표로 보여주는 장소가 바뀌었으니, 이미 만들어둔 경로는 더 이상 맞지 않는다.
+    clearDayRoute(day);
+    setShareStatus((previous) => ({ ...previous, url: '', copied: false }));
+  };
+
+  // fromSlot을 toSlot 위로 드래그해서 놓았을 때 — fromSlot이 지금 보여주고
+  // 있던 옵션 하나만 떼어내서 toSlot의 다음 대안(B안/C안...)으로 편입시킨다.
+  // fromSlot에 옵션이 더 남아있으면 그 슬롯은 줄어든 채로 남고, 없으면 사라진다.
+  const handleMergeIntoSlot = (day, fromSlotId, toSlotId) => {
+    if (fromSlotId === toSlotId) return;
+
+    setItinerary((previous) => {
+      const slots = previous[day] || [];
+      const fromSlot = slots.find((slot) => slot.id === fromSlotId);
+      const toSlot = slots.find((slot) => slot.id === toSlotId);
+      if (!fromSlot || !toSlot) return previous;
+
+      const fromIndex = fromSlot.selectedIndex ?? 0;
+      const movingOption = fromSlot.options[fromIndex];
+      const remainingOptions = fromSlot.options.filter((_, i) => i !== fromIndex);
+
+      const nextSlots = slots
+        .map((slot) => {
+          if (slot.id === toSlotId) {
+            return { ...slot, options: [...slot.options, movingOption] };
+          }
+          if (slot.id === fromSlotId) {
+            return remainingOptions.length > 0
+              ? { ...slot, options: remainingOptions, selectedIndex: 0 }
+              : null;
+          }
+          return slot;
+        })
+        .filter(Boolean);
+
+      return { ...previous, [day]: nextSlots };
+    });
     clearDayRoute(day);
     setShareStatus((previous) => ({ ...previous, url: '', copied: false }));
   };
@@ -504,6 +581,8 @@ function App() {
         onAddPlace={handleAddPlace}
         onDeletePlace={handleDeletePlace}
         onReorder={handleReorderPlaces}
+        onMergeIntoSlot={handleMergeIntoSlot}
+        onSelectOption={handleSelectOption}
         onOptimize={handleOptimizeRoute}
         onResetTrip={handleResetTrip}
         onSharePlan={handleSharePlan}

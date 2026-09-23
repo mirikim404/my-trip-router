@@ -1,6 +1,11 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import Search from './Search';
+import { OptionSwiper } from './DayScheduleCard';
 import { useBottomSheet } from '../utils/useBottomSheet';
+
+// 드롭 위치가 항목 세로 영역의 위/아래 25% 안쪽이면 "순서 변경", 가운데
+// 50%면 "이 항목의 대안(B안/C안...)으로 합치기"로 구분한다.
+const EDGE_ZONE_RATIO = 0.25;
 
 const Sidebar = ({
   profile,
@@ -11,12 +16,15 @@ const Sidebar = ({
   onAddPlace,
   onDeletePlace,
   onReorder,
+  onMergeIntoSlot,
+  onSelectOption,
   onOptimize,
   onResetTrip,
   onSharePlan,
   shareStatus,
 }) => {
   const [draggedItem, setDraggedItem] = useState(null);
+  const [dropTarget, setDropTarget] = useState(null); // { index, mode: 'before' | 'after' | 'merge' }
   const [selectedPlaces, setSelectedPlaces] = useState({});
   const [isToolsOpen, setIsToolsOpen] = useState(false);
   const itemRefs = useRef(new Map());
@@ -33,15 +41,17 @@ const Sidebar = ({
     handleSheetPointerUp,
   } = useBottomSheet();
 
-  const getPlaceKey = (day, place) => (
-    place.id || `${day}-${place.title}-${place.address || ''}-${place.lat}-${place.lng}`
-  );
+  // itinerary[day]의 각 항목은 이제 "슬롯"이다: { id, options: [place, ...], selectedIndex }.
+  // 슬롯 자체의 id를 키로 쓰고, 실제 경로 계산에는 슬롯이 현재 보여주고 있는
+  // 옵션(선택된 A안/B안 하나)만 골라 넘긴다.
+  const getSlotKey = (slot) => slot.id;
+  const getActivePlace = (slot) => slot.options[slot.selectedIndex ?? 0];
 
   const getSelectedPlaces = (day) => {
     const selectedKeys = selectedPlaces[day];
-    return (itinerary[day] || []).filter((place) => (
-      !selectedKeys || selectedKeys.includes(getPlaceKey(day, place))
-    ));
+    return (itinerary[day] || [])
+      .filter((slot) => !selectedKeys || selectedKeys.includes(getSlotKey(slot)))
+      .map((slot) => getActivePlace(slot));
   };
 
   useLayoutEffect(() => {
@@ -143,42 +153,88 @@ const Sidebar = ({
               <p className="empty-state">아직 추가한 장소가 없어요.</p>
             ) : (
               <ul className="place-list">
-                {places.map((place, index) => {
-                  const placeKey = getPlaceKey(day.key, place);
+                {places.map((slot, index) => {
+                  const slotKey = getSlotKey(slot);
+                  const activePlace = getActivePlace(slot);
                   const selectedKeys = selectedPlaces[day.key];
-                  const isSelected = !selectedKeys || selectedKeys.includes(placeKey);
+                  const isSelected = !selectedKeys || selectedKeys.includes(slotKey);
+                  const isMultiOption = slot.options.length > 1;
+                  const dropClass = dropTarget?.index === index ? ` drop-${dropTarget.mode}` : '';
 
                   return (
                     <li
-                      key={placeKey}
-                      ref={(element) => itemRefs.current.set(placeKey, element)}
-                      draggable
-                      onDragStart={() => setDraggedItem({ day: day.key, index })}
-                      onDragOver={(event) => event.preventDefault()}
+                      key={slotKey}
+                      ref={(element) => itemRefs.current.set(slotKey, element)}
+                      className={dropClass.trim()}
+                      onDragOver={(event) => {
+                        event.preventDefault();
+                        const rect = event.currentTarget.getBoundingClientRect();
+                        const relativeY = (event.clientY - rect.top) / rect.height;
+                        let mode = 'merge';
+                        if (relativeY < EDGE_ZONE_RATIO) mode = 'before';
+                        else if (relativeY > 1 - EDGE_ZONE_RATIO) mode = 'after';
+                        setDropTarget({ index, mode });
+                      }}
+                      onDragLeave={() => {
+                        setDropTarget((previous) => (previous?.index === index ? null : previous));
+                      }}
                       onDrop={() => {
-                        if (draggedItem && draggedItem.day === day.key) {
-                          onReorder(day.key, draggedItem.index, index);
+                        if (draggedItem && draggedItem.day === day.key && draggedItem.index !== index) {
+                          if (dropTarget?.mode === 'merge') {
+                            onMergeIntoSlot(day.key, draggedItem.id, slotKey);
+                          } else {
+                            onReorder(day.key, draggedItem.index, index);
+                          }
                         }
                         setDraggedItem(null);
+                        setDropTarget(null);
                       }}
-                      onDragEnd={() => setDraggedItem(null)}
                     >
+                      <span
+                        className="place-drag-handle"
+                        draggable
+                        onDragStart={(event) => {
+                          // 드래그 중 미리보기 이미지는 행 전체(li)로 보이게 하되,
+                          // 실제 draggable/포인터 캡처는 이 손잡이에만 걸어서
+                          // OptionSwiper의 좌우 스와이프와 겹치지 않게 한다.
+                          const row = event.currentTarget.closest('li');
+                          if (row) event.dataTransfer.setDragImage(row, 16, 16);
+                          setDraggedItem({ day: day.key, index, id: slotKey });
+                        }}
+                        onDragEnd={() => {
+                          setDraggedItem(null);
+                          setDropTarget(null);
+                        }}
+                        role="button"
+                        tabIndex={-1}
+                        aria-label="드래그해서 순서 변경 또는 다른 항목에 겹쳐서 대안으로 합치기"
+                      >
+                        ⠿
+                      </span>
+
                       <input
                         type="checkbox"
                         checked={isSelected}
                         onChange={() => {
-                          const currentKeys = selectedKeys || places.map((item) => getPlaceKey(day.key, item));
+                          const currentKeys = selectedKeys || places.map((item) => getSlotKey(item));
                           setSelectedPlaces((previous) => ({
                             ...previous,
                             [day.key]: isSelected
-                              ? currentKeys.filter((key) => key !== placeKey)
-                              : [...currentKeys, placeKey],
+                              ? currentKeys.filter((key) => key !== slotKey)
+                              : [...currentKeys, slotKey],
                           }));
                         }}
-                        aria-label={`${place.title} 경로에 포함`}
+                        aria-label={`${activePlace.title} 경로에 포함`}
                       />
 
-                      <strong title={place.title}>{index + 1}. {place.title}</strong>
+                      <div className="place-options">
+                        <span className="place-index">{index + 1}.</span>
+                        <OptionSwiper
+                          options={slot.options}
+                          selectedIndex={slot.selectedIndex ?? 0}
+                          onSelect={(nextIndex) => onSelectOption(day.key, slotKey, nextIndex)}
+                        />
+                      </div>
 
                       <div className="place-actions">
                         <button
@@ -191,8 +247,8 @@ const Sidebar = ({
                         </button>
                         <button
                           onClick={() => onDeletePlace(day.key, index)}
-                          aria-label={`${place.title} 삭제`}
-                          title="삭제"
+                          aria-label={isMultiOption ? `${activePlace.title} 옵션 삭제` : `${activePlace.title} 삭제`}
+                          title={isMultiOption ? '현재 보이는 옵션만 삭제' : '삭제'}
                         >
                           삭제
                         </button>
